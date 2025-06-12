@@ -16,20 +16,20 @@ from word_document_server.tools.content_tools import (
     format_research_paper_terms
 )
 from word_document_server.tools.review_tools import (
-    extract_comments,
+    manage_comments,
     extract_track_changes,
     generate_review_summary,
-    add_comment
 )
 from word_document_server.tools.section_tools import (
-    extract_sections_by_heading,
-    extract_section_content,
+    get_sections,
     generate_table_of_contents,
-    get_section_statistics
 )
 
+# Path to the generated test document
+TEST_FILENAME = None
 
-async def create_test_document():
+
+def create_test_document():
     """Create a test document for demonstrating enhanced features."""
     filename = "test_enhanced_features.docx"
     
@@ -114,15 +114,17 @@ async def create_test_document():
     return filename
 
 
-async def test_enhanced_search_replace():
+def test_enhanced_search_replace():
     """Test the enhanced search and replace functionality."""
     print("\n=== TESTING ENHANCED SEARCH AND REPLACE ===")
-    
-    filename = await create_test_document()
+
+    global TEST_FILENAME
+    TEST_FILENAME = create_test_document()
+    filename = TEST_FILENAME
     
     # Test 1: Basic enhanced search and replace with formatting
     print("Test 1: Replace 'PCL' with formatted version...")
-    result = await enhanced_search_and_replace(
+    result = enhanced_search_and_replace(
         filename=filename,
         find_text="PCL",
         replace_text="PCL",
@@ -134,12 +136,12 @@ async def test_enhanced_search_replace():
     
     # Test 2: Format specific research terms
     print("\nTest 2: Format research paper terms...")
-    result = await format_research_paper_terms(filename)
+    result = format_research_paper_terms(filename)
     print(f"Result: {result}")
     
     # Test 3: Format statistical terms
     print("\nTest 3: Format statistical significance values...")
-    result = await format_specific_words(
+    result = format_specific_words(
         filename=filename,
         word_list=["p < 0.05", "r²", "±"],
         bold=True,
@@ -147,91 +149,64 @@ async def test_enhanced_search_replace():
         whole_words_only=False
     )
     print(f"Result: {result}")
-    
-    return filename
 
 
-async def test_review_tools(filename):
+def test_review_tools():
     """Test the review and collaboration tools."""
     print("\n=== TESTING REVIEW TOOLS ===")
     
     # Test 1: Add a comment
     print("Test 1: Adding a comment to the abstract...")
-    result = await add_comment(
+    filename = TEST_FILENAME
+    result = manage_comments(
         filename=filename,
+        action="add",
         paragraph_index=2,  # Abstract paragraph
         comment_text="Consider adding more details about the mechanism of mesophase formation.",
-        author="Dr. Smith"
+        author="Dr. Smith",
     )
     print(f"Result: {result}")
-    
+
     # Test 2: Extract comments (if any exist)
     print("\nTest 2: Extracting comments...")
-    result = await extract_comments(filename)
+    result = manage_comments(filename=filename, action="list")
     print(f"Result: {result}")
     
     # Test 3: Extract track changes (if any exist)
     print("\nTest 3: Extracting track changes...")
-    result = await extract_track_changes(filename)
+    result = extract_track_changes(filename)
     print(f"Result: {result}")
     
     # Test 4: Generate review summary
     print("\nTest 4: Generating review summary...")
-    result = await generate_review_summary(filename)
+    result = asyncio.run(generate_review_summary(filename))
     print(f"Result: {result}")
 
 
-async def test_section_tools(filename):
+def test_section_tools():
     """Test the section management tools."""
     print("\n=== TESTING SECTION MANAGEMENT TOOLS ===")
     
     # Test 1: Extract sections by heading
     print("Test 1: Extracting document sections...")
-    result = await extract_sections_by_heading(filename)
+    filename = TEST_FILENAME
+    result = asyncio.run(get_sections(filename=filename, mode="overview"))
     print(f"Result: {result}")
     
     # Test 2: Extract specific section content
     print("\nTest 2: Extracting 'Methods' section content...")
-    result = await extract_section_content(filename, "Methods")
+    result = asyncio.run(get_sections(filename=filename, mode="content", section_title="Methods"))
     print(f"Result: {result}")
     
     # Test 3: Generate table of contents
     print("\nTest 3: Generating table of contents...")
-    result = await generate_table_of_contents(filename)
+    result = asyncio.run(generate_table_of_contents(filename))
     print(f"Result: {result}")
     
-    # Test 4: Get section statistics
+    # Test 4: Get section overview as JSON for statistics
     print("\nTest 4: Getting section statistics...")
-    result = await get_section_statistics(filename)
-    print(f"Result: {result}")
+    stats = asyncio.run(get_sections(filename=filename, mode="overview", output_format="json"))
+    print(f"Result: {stats}")
 
 
-async def run_all_tests():
-    """Run all enhanced feature tests."""
-    print("=" * 60)
-    print("TESTING ENHANCED WORD MCP SERVER FEATURES")
-    print("=" * 60)
-    
-    try:
-        # Test enhanced search and replace
-        filename = await test_enhanced_search_replace()
-        
-        # Test review tools
-        await test_review_tools(filename)
-        
-        # Test section tools
-        await test_section_tools(filename)
-        
-        print("\n" + "=" * 60)
-        print("ALL TESTS COMPLETED SUCCESSFULLY!")
-        print(f"Test document created: {filename}")
-        print("=" * 60)
-        
-    except Exception as e:
-        print(f"\nERROR DURING TESTING: {str(e)}")
-        import traceback
-        traceback.print_exc()
 
-
-if __name__ == "__main__":
-    asyncio.run(run_all_tests())
