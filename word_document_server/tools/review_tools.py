@@ -310,7 +310,7 @@ async def generate_review_summary(document_id: str = None, filename: str = None)
     
     try:
         # Get comments
-        comments_result = manage_comments(filename, action="list")
+        comments_result = manage_comments(filename=filename, action="list")
         
         # Get track changes
         changes_result = extract_track_changes(filename)
