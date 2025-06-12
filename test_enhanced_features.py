@@ -147,7 +147,17 @@ async def test_enhanced_search_replace():
         whole_words_only=False
     )
     print(f"Result: {result}")
-    
+
+    # Test 4: Regex replacement with $1 group reference
+    print("\nTest 4: Regex group substitution...")
+    result = await enhanced_search_and_replace(
+        filename=filename,
+        find_text=r"(\d+)°C and (\d+)°C",
+        replace_text=r"$2°C and $1°C",
+        use_regex=True
+    )
+    print(f"Result: {result}")
+
     return filename
 
 

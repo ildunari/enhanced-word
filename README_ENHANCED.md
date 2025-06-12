@@ -12,7 +12,7 @@ This enhanced server solves critical limitations in LLM-friendly document manipu
 
 #### 1. **Enhanced Search & Replace with Formatting**
 - ✅ **Solves LLM character positioning problem** - No more counting characters!
-- ✅ Semantic text targeting with regex support
+- ✅ Semantic text targeting with regex support (use `$1` style groups)
 - ✅ Simultaneous text replacement and formatting
 - ✅ Batch word formatting for research terms
 - ✅ Academic research helpers (PCL terminology, statistical notation)
@@ -84,6 +84,7 @@ await format_research_paper_terms("research_paper.docx")
 - Semantic text matching
 - Simultaneous replacement and formatting
 - Support for regex patterns and whole-word matching
+- `$1` style group references for regex replacements
 - Academic research terminology helpers
 
 ### Review Tools

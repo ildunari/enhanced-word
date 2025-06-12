@@ -547,6 +547,8 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         try:
             import re
             re.compile(find_text)
+            # Convert $1 style groups to Python \1 syntax
+            replace_text = re.sub(r'\$(\d+)', r'\\\1', replace_text)
         except re.error as e:
             return f"Invalid regex pattern '{find_text}': {str(e)}"
     

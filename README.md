@@ -70,7 +70,9 @@ Specialized functionality for professional workflows:
 - **Case-insensitive** search options
 - **Whole word matching**
 - **Advanced formatting** application to replaced text
-- **Group substitutions** for regex patterns
+- **Group substitutions** for regex patterns (use `$1` style references)
+
+`$1` style group references are automatically converted to Python's `\1` syntax when `use_regex=True`.
 
 ```python
 # Regex date format conversion
