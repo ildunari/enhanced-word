@@ -229,8 +229,9 @@ async def add_note(
             if not footnote_section_found:
                 # Add footnotes section
                 doc.add_paragraph("\\n").add_run()
-                footnotes_heading = doc.add_paragraph("Footnotes:")
-                footnotes_heading.bold = True
+                footnotes_heading = doc.add_paragraph()
+                footnotes_heading.add_run("Footnotes:")
+                footnotes_heading.runs[0].bold = True
             
             # Add footnote text
             footnote_para = doc.add_paragraph(f"{symbol} {note_text}")
