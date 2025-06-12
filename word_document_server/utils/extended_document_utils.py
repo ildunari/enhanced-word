@@ -80,31 +80,26 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
                 search_text = search_text.lower()
             
             # Find all occurrences (simple implementation)
-            start_pos = 0
-            while True:
-                if whole_word:
-                    # For whole word search, we need to check word boundaries
-                    words = para_text.split()
-                    found = False
-                    for word_idx, word in enumerate(words):
-                        if (word == search_text or 
-                            (not match_case and word.lower() == search_text.lower())):
-                            results["occurrences"].append({
-                                "paragraph_index": i,
-                                "position": word_idx,
-                                "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
-                            })
-                            results["total_count"] += 1
-                            found = True
-                    
-                    # Break after checking all words
-                    break
-                else:
-                    # For substring search
+            if whole_word:
+                # Iterate over each word in the paragraph text
+                words = para_text.split()
+                for word_idx, word in enumerate(words):
+                    if (word == search_text or
+                        (not match_case and word.lower() == search_text.lower())):
+                        results["occurrences"].append({
+                            "paragraph_index": i,
+                            "position": word_idx,
+                            "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
+                        })
+                        results["total_count"] += 1
+            else:
+                # For substring search
+                start_pos = 0
+                while True:
                     pos = para_text.find(search_text, start_pos)
                     if pos == -1:
                         break
-                    
+
                     results["occurrences"].append({
                         "paragraph_index": i,
                         "position": pos,
@@ -127,31 +122,26 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
                             search_text = search_text.lower()
                         
                         # Find all occurrences (simple implementation)
-                        start_pos = 0
-                        while True:
-                            if whole_word:
-                                # For whole word search, check word boundaries
-                                words = para_text.split()
-                                found = False
-                                for word_idx, word in enumerate(words):
-                                    if (word == search_text or 
-                                        (not match_case and word.lower() == search_text.lower())):
-                                        results["occurrences"].append({
-                                            "location": f"Table {table_idx}, Row {row_idx}, Column {col_idx}",
-                                            "position": word_idx,
-                                            "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
-                                        })
-                                        results["total_count"] += 1
-                                        found = True
-                                
-                                # Break after checking all words
-                                break
-                            else:
-                                # For substring search
+                        if whole_word:
+                            # Iterate over each word in the paragraph text
+                            words = para_text.split()
+                            for word_idx, word in enumerate(words):
+                                if (word == search_text or
+                                    (not match_case and word.lower() == search_text.lower())):
+                                    results["occurrences"].append({
+                                        "location": f"Table {table_idx}, Row {row_idx}, Column {col_idx}",
+                                        "position": word_idx,
+                                        "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
+                                    })
+                                    results["total_count"] += 1
+                        else:
+                            # For substring search
+                            start_pos = 0
+                            while True:
                                 pos = para_text.find(search_text, start_pos)
                                 if pos == -1:
                                     break
-                                
+
                                 results["occurrences"].append({
                                     "location": f"Table {table_idx}, Row {row_idx}, Column {col_idx}",
                                     "position": pos,
