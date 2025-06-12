@@ -2,7 +2,7 @@
 
 [![smithery badge](https://smithery.ai/badge/@GongRzhe/Office-Word-MCP-Server)](https://smithery.ai/server/@GongRzhe/Office-Word-MCP-Server)
 
-A powerful, consolidated Model Context Protocol (MCP) server for creating, reading, and manipulating Microsoft Word documents. This enhanced version provides 24 optimized tools (reduced from 47) for comprehensive Word document operations through a standardized interface.
+A powerful, consolidated Model Context Protocol (MCP) server for creating, reading, and manipulating Microsoft Word documents. This enhanced version provides 22 optimized tools (reduced from 47) for comprehensive Word document operations through a standardized interface.
 
 <a href="https://glama.ai/mcp/servers/@GongRzhe/Office-Word-MCP-Server">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@GongRzhe/Office-Word-MCP-Server/badge" alt="Office Word Server MCP server" />
@@ -12,9 +12,9 @@ A powerful, consolidated Model Context Protocol (MCP) server for creating, readi
 
 ## Overview
 
-Enhanced-Word-MCP-Server implements the [Model Context Protocol](https://modelcontextprotocol.io/) with a focus on consolidation and efficiency. It provides 24 powerful tools that replace 47 individual functions, offering:
+Enhanced-Word-MCP-Server implements the [Model Context Protocol](https://modelcontextprotocol.io/) with a focus on consolidation and efficiency. It provides 22 powerful tools that replace 47 individual functions, offering:
 
-- **48% tool reduction** while preserving all functionality
+- **53% tool reduction** while preserving all functionality
 - **Consolidated operations** for better usability  
 - **Enhanced functionality** with regex support and advanced formatting
 - **Academic and professional workflow optimization**
@@ -47,19 +47,17 @@ Unified operations that replace multiple individual functions:
 - **`get_sections`** - Section extraction (replaces 2 tools)
 - **`manage_protection`** - Document protection (replaces 2 tools)
 
-### 📄 Essential Document Tools (10 Tools)
+### 📄 Essential Document Tools (7 Tools)
 Core document management functionality:
 
 - **Document Lifecycle**: `create_document`, `copy_document`, `merge_documents`
-- **Document Analysis**: `get_document_info`, `get_document_outline`, `list_available_documents`
 - **Content Operations**: `enhanced_search_and_replace`, `add_table`, `add_picture`
 - **Export**: `convert_to_pdf`
 
-### 🔧 Advanced Features (8 Tools)
+### 🔧 Advanced Features (5 Tools)
 Specialized functionality for professional workflows:
 
-- **Academic Formatting**: `format_specific_words`, `format_research_paper_terms`
-- **Collaboration**: `extract_comments`, `extract_track_changes`, `generate_review_summary`
+- **Collaboration**: `manage_comments`, `extract_track_changes`, `generate_review_summary`
 - **Document Structure**: `generate_table_of_contents`
 - **Security**: `add_digital_signature`, `verify_document`
 
@@ -315,7 +313,7 @@ MIT License - see LICENSE file for details.
 ## Version History
 
 ### v2.0.0 (Enhanced)
-- 🎯 **48% tool reduction** (47 → 24 tools)
+- 🎯 **53% tool reduction** (47 → 22 tools)
 - 🚀 **Enhanced search & replace** with regex support
 - 📝 **Consolidated operations** for better usability
 - 🔧 **Improved error handling** and validation
