@@ -157,6 +157,7 @@ def sanitize_file_path(filepath: str, allowed_extensions: List[str] = None) -> T
     """
     import os.path
     from pathlib import Path
+    import re
     
     if not filepath or not isinstance(filepath, str):
         return False, "", "Invalid file path provided"
@@ -164,12 +165,21 @@ def sanitize_file_path(filepath: str, allowed_extensions: List[str] = None) -> T
     try:
         # Convert to Path object for better handling
         path = Path(filepath)
-        
-        # Check for path traversal attempts
-        if '..' in str(path) or str(path).startswith('/') or ':' in str(path):
-            # Allow absolute paths but check for traversal
+        path_str = str(path)
+
+        # Check for path traversal attempts via '..' segments
+        if '..' in path.parts:
+            return False, "", "Path traversal detected in file path"
+
+        # Validate colon usage (allow Windows drive letters like C:\\)
+        if ':' in path_str:
+            if not re.match(r'^[a-zA-Z]:[\\/]', path_str):
+                return False, "", "Invalid ':' in file path"
+
+        # If absolute path, ensure resolved path does not contain traversal
+        if path.is_absolute():
             resolved_path = path.resolve()
-            if '..' in str(resolved_path):
+            if '..' in resolved_path.parts:
                 return False, "", "Path traversal detected in file path"
         
         # Check for dangerous characters
