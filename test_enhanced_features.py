@@ -147,6 +147,16 @@ async def test_enhanced_search_replace():
         whole_words_only=False
     )
     print(f"Result: {result}")
+
+    # Test 4: Delete a word using empty replacement
+    print("\nTest 4: Delete 'mesophase' occurrences...")
+    result = await enhanced_search_and_replace(
+        filename=filename,
+        find_text="mesophase",
+        replace_text="",
+        match_case=False
+    )
+    print(f"Result: {result}")
     
     return filename
 

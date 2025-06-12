@@ -487,7 +487,8 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         document_id: Session document ID (preferred)
         filename: Path to the Word document (legacy, for backward compatibility)
         find_text: Text or regex pattern to search for
-        replace_text: Text to replace with (supports regex groups like $1, $2 if use_regex=True)
+        replace_text: Text to replace with (supports regex groups like $1, $2 if use_regex=True).
+            Use an empty string "" to delete the matched text.
         apply_formatting: Whether to apply formatting to the replaced text
         bold: Set replaced text bold (True/False)
         italic: Set replaced text italic (True/False)
@@ -531,7 +532,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     if not find_text:
         return "Error: find_text parameter is required"
     
-    if not replace_text:
+    if replace_text is None:
         return "Error: replace_text parameter is required"
     
     if not os.path.exists(filename):
