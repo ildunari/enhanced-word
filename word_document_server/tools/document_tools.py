@@ -5,6 +5,7 @@ import os
 import json
 from typing import Dict, List, Optional, Any
 from docx import Document
+import asyncio
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, create_document_copy
 from word_document_server.utils.document_utils import get_document_properties, extract_document_text, get_document_structure
@@ -667,7 +668,7 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
         return f"Failed to merge documents: {str(e)}"
 
 
-def document_utility(
+async def document_utility(
     action: str,
     document_id: str = None,
     filename: str = None,
@@ -692,18 +693,17 @@ def document_utility(
         
     Examples:
         # Get document information (session-based)
-        document_utility("info", document_id="main")
-        
+        await document_utility("info", document_id="main")
+
         # Get document structure/outline (legacy filename)
-        document_utility("outline", filename="research_paper.docx")
-        
+        await document_utility("outline", filename="research_paper.docx")
+
         # List Word documents in current directory
-        document_utility("list_files")
-        
+        await document_utility("list_files")
+
         # List Word documents in specific directory
-        document_utility("list_files", "", "/Users/john/Documents")
+        await document_utility("list_files", "", "/Users/john/Documents")
     """
-    import asyncio
     from word_document_server.utils.session_utils import resolve_document_path
     
     # Validate action parameter
@@ -719,41 +719,15 @@ def document_utility(
     
     # Delegate to appropriate original function based on action
     try:
-        import asyncio
-        
         if action == "info":
-            # Check if we're in an event loop
-            try:
-                loop = asyncio.get_running_loop()
-                # We're in a running loop, create a task
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, get_document_info(filename))
-                    return future.result()
-            except RuntimeError:
-                # No running loop, safe to use asyncio.run
-                return asyncio.run(get_document_info(filename))
-            
+            return await get_document_info(filename)
+
         elif action == "outline":
-            try:
-                loop = asyncio.get_running_loop()
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, get_document_outline(filename))
-                    return future.result()
-            except RuntimeError:
-                return asyncio.run(get_document_outline(filename))
-            
+            return await get_document_outline(filename)
+
         elif action == "list_files":
             search_dir = directory if directory else "."
-            try:
-                loop = asyncio.get_running_loop()
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, list_available_documents(search_dir))
-                    return future.result()
-            except RuntimeError:
-                return asyncio.run(list_available_documents(search_dir))
-            
+            return await list_available_documents(search_dir)
+
     except Exception as e:
         return f"Error in document_utility: {str(e)}"
