@@ -1,7 +1,7 @@
 {
   "name": "enhanced-word-mcp-server",
-  "version": "2.5.1",
-  "description": "Enhanced Word MCP server with 22 consolidated tools for comprehensive Word document operations. Features complete session management, unified tool interfaces, regex search, and advanced document collaboration.",
+  "version": "2.6.0",
+  "description": "Enhanced Word MCP server with comprehensive document operations. Features 24 consolidated tools, regex positioning fixes, and complete Word document manipulation capabilities.",
   "main": "index.js",
   "bin": {
     "enhanced-word-mcp-server": "./bin/enhanced-word-mcp-server.js"
@@ -40,12 +40,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kosta/kosta-enhanced-word-mcp-server.git"
+    "url": "https://github.com/ildunari/enhanced-word.git"
   },
   "bugs": {
-    "url": "https://github.com/kosta/kosta-enhanced-word-mcp-server/issues"
+    "url": "https://github.com/ildunari/enhanced-word/issues"
   },
-  "homepage": "https://github.com/kosta/kosta-enhanced-word-mcp-server#readme",
+  "homepage": "https://github.com/ildunari/enhanced-word#readme",
   "engines": {
     "node": ">=16.0.0"
   },
