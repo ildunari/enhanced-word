@@ -32,7 +32,6 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 only-include = [
     "word_document_server",
-    "office_word_mcp_server",
 ]
 sources = ["."]
 
