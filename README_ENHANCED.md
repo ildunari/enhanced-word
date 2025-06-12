@@ -66,7 +66,7 @@ The enhanced search and replace feature solves the fundamental problem of charac
 
 ```python
 # Example: Format research terms with semantic targeting
-await enhanced_search_and_replace(
+enhanced_search_and_replace(
     filename="research_paper.docx",
     find_text="polycaprolactone",
     replace_text="polycaprolactone",
