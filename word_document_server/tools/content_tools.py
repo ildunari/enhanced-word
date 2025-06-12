@@ -5,9 +5,8 @@ These tools add various types of content to Word documents,
 including headings, paragraphs, tables, images, and page breaks.
 """
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from docx import Document
-from docx.text.run import Run
 from docx.shared import Inches, Pt
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, validate_docx_path
@@ -186,7 +185,7 @@ async def add_text_content(
     filename, error_msg = resolve_document_path(document_id, filename)
     if error_msg:
         return error_msg
-    
+
     # Validate required parameters
     if not text:
         return "Error: text parameter is required"
@@ -526,6 +525,10 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     filename, error_msg = resolve_document_path(document_id, filename)
     if error_msg:
         return error_msg
+    valid_path, filename, path_error = validate_docx_path(filename)
+    if not valid_path:
+        return path_error
+
     
     # Validate required parameters
     if not find_text:
@@ -599,7 +602,6 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
     Supports both literal text matching and regex pattern matching.
     """
     import re
-    from docx.shared import Pt, RGBColor
     
     count = 0
     
@@ -774,41 +776,6 @@ def _apply_run_formatting(run, formatting):
 
 
 
-def _apply_formatting_to_run(run, bold, italic, underline, color, font_size, font_name):
-    """Apply formatting to a run with error handling."""
-    try:
-        if bold is not None:
-            run.bold = bold
-        if italic is not None:
-            run.italic = italic
-        if underline is not None:
-            run.underline = underline
-        if color:
-            _apply_color_to_run(run, color)
-        if font_size:
-            from docx.shared import Pt
-            run.font.size = Pt(font_size)
-        if font_name:
-            run.font.name = font_name
-    except Exception:
-        # Silently continue if formatting fails
-        pass
-
-def _copy_run_formatting(source_run, target_run):
-    """Copy formatting from source run to target run."""
-    try:
-        target_run.bold = source_run.bold
-        target_run.italic = source_run.italic
-        target_run.underline = source_run.underline
-        if source_run.font.name:
-            target_run.font.name = source_run.font.name
-        if source_run.font.size:
-            target_run.font.size = source_run.font.size
-        if source_run.font.color.rgb:
-            target_run.font.color.rgb = source_run.font.color.rgb
-    except Exception:
-        # Silently continue if copying formatting fails
-        pass
 
 
 def _apply_color_to_run(run, color):
