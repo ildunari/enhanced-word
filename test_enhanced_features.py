@@ -16,10 +16,9 @@ from word_document_server.tools.content_tools import (
     format_research_paper_terms
 )
 from word_document_server.tools.review_tools import (
-    extract_comments,
+    manage_comments,
     extract_track_changes,
     generate_review_summary,
-    add_comment
 )
 from word_document_server.tools.section_tools import (
     extract_sections_by_heading,
@@ -157,17 +156,18 @@ async def test_review_tools(filename):
     
     # Test 1: Add a comment
     print("Test 1: Adding a comment to the abstract...")
-    result = await add_comment(
+    result = manage_comments(
         filename=filename,
+        action="add",
         paragraph_index=2,  # Abstract paragraph
         comment_text="Consider adding more details about the mechanism of mesophase formation.",
         author="Dr. Smith"
     )
     print(f"Result: {result}")
-    
+
     # Test 2: Extract comments (if any exist)
     print("\nTest 2: Extracting comments...")
-    result = await extract_comments(filename)
+    result = manage_comments(filename=filename, action="list")
     print(f"Result: {result}")
     
     # Test 3: Extract track changes (if any exist)
