@@ -149,6 +149,16 @@ def test_enhanced_search_replace():
         whole_words_only=False
     )
     print(f"Result: {result}")
+    
+    # Test 4: Delete 'mesophase' occurrences using empty replacement
+    print("\nTest 4: Delete 'mesophase' occurrences...")
+    result = enhanced_search_and_replace(
+        filename=filename,
+        find_text="mesophase",
+        replace_text="",  # Empty string for deletion
+        match_case=False
+    )
+    print(f"Result: {result}")
 
 
 def test_review_tools():
@@ -174,12 +184,12 @@ def test_review_tools():
     
     # Test 3: Extract track changes (if any exist)
     print("\nTest 3: Extracting track changes...")
-    result = extract_track_changes(filename)
+    result = extract_track_changes(filename=filename)
     print(f"Result: {result}")
     
     # Test 4: Generate review summary
     print("\nTest 4: Generating review summary...")
-    result = asyncio.run(generate_review_summary(filename))
+    result = generate_review_summary(filename=filename)
     print(f"Result: {result}")
 
 

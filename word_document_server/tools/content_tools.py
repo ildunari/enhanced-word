@@ -261,17 +261,20 @@ async def add_text_content(
             ensure_heading_style(doc)
             
             try:
-                if position in ["end", "beginning"]:
-                    # Add at document level
-                    if position == "beginning":
-                        # Insert at beginning - need to use paragraph insertion
-                        new_paragraph = doc.paragraphs[0]._element.getparent().insert(0, doc.add_heading(text, level=level)._element)
-                        heading = doc.add_heading(text, level=level)
-                    else:
-                        heading = doc.add_heading(text, level=level)
-                    
+                if position == "end":
+                    # Create the heading at end (default behavior)
+                    heading = doc.add_heading(text, level=level)
                     created_element = heading
                     success_message = f"Heading '{text}' (level {level}) added"
+                elif position == "beginning":
+                    # Create the heading and move to beginning
+                    heading = doc.add_heading(text, level=level)
+                    created_element = heading
+                    success_message = f"Heading '{text}' (level {level}) added"
+                    # Move heading element to the beginning (it's automatically removed from current position)
+                    body = doc._body._element
+                    body.remove(heading._element)
+                    body.insert(0, heading._element)
                 else:
                     # Insert at specific position
                     heading = doc.add_heading(text, level=level)
@@ -545,7 +548,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     if not find_text:
         return "Error: find_text parameter is required"
     
-    if not replace_text:
+    if replace_text is None:
         return "Error: replace_text parameter is required"
     
     if not os.path.exists(filename):
@@ -560,7 +563,9 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     if use_regex:
         try:
             import re
-            re.compile(find_text)
+            # Validate with the same flags used at runtime
+            flags = re.IGNORECASE if not match_case else 0
+            re.compile(find_text, flags)
         except re.error as e:
             return f"Invalid regex pattern '{find_text}': {str(e)}"
     

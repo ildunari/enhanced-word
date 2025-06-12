@@ -336,14 +336,6 @@ async def get_sections(
                                 extract_run_formatting(run, formatting_detail)
                             )
                 
-                # Check if this matches target section (if specified)
-                title_match = False
-                if section_title:
-                    if case_sensitive:
-                        title_match = section_title in paragraph.text
-                    else:
-                        title_match = section_title.lower() in paragraph.text.lower()
-                
                 # Add to appropriate location
                 if heading_level == 1 or not sections:
                     sections.append(section_info)
@@ -393,14 +385,12 @@ async def get_sections(
         if section_title:
             filtered_sections = []
             for section in sections:
-                title_match = False
                 if case_sensitive:
-                    title_match = section_title in section["title"]
+                    if section_title in section["title"]:
+                        filtered_sections.append(section)
                 else:
-                    title_match = section_title.lower() in section["title"].lower()
-                
-                if title_match:
-                    filtered_sections.append(section)
+                    if section_title.lower() in section["title"].lower():
+                        filtered_sections.append(section)
             
             if not filtered_sections:
                 return f"Section '{section_title}' not found in document"

@@ -722,14 +722,12 @@ def document_utility(
         import asyncio
         
         if action == "info":
-            # Check if we're in an event loop
+            # Proper async handling without threading anti-patterns
             try:
                 loop = asyncio.get_running_loop()
-                # We're in a running loop, create a task
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, get_document_info(filename))
-                    return future.result()
+                # We're in a running loop, create task in existing loop
+                task = loop.create_task(get_document_info(filename))
+                return loop.run_until_complete(task)
             except RuntimeError:
                 # No running loop, safe to use asyncio.run
                 return asyncio.run(get_document_info(filename))
@@ -737,10 +735,9 @@ def document_utility(
         elif action == "outline":
             try:
                 loop = asyncio.get_running_loop()
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, get_document_outline(filename))
-                    return future.result()
+                # We're in a running loop, create task in existing loop
+                task = loop.create_task(get_document_outline(filename))
+                return loop.run_until_complete(task)
             except RuntimeError:
                 return asyncio.run(get_document_outline(filename))
             
@@ -748,10 +745,9 @@ def document_utility(
             search_dir = directory if directory else "."
             try:
                 loop = asyncio.get_running_loop()
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, list_available_documents(search_dir))
-                    return future.result()
+                # We're in a running loop, create task in existing loop
+                task = loop.create_task(list_available_documents(search_dir))
+                return loop.run_until_complete(task)
             except RuntimeError:
                 return asyncio.run(list_available_documents(search_dir))
             
