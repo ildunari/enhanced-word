@@ -357,9 +357,20 @@ async def add_table(document_id: str = None, filename: str = None, rows: int = N
         return error_msg
     
     filename = ensure_docx_extension(filename)
-    
+
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
+
+    # Validate rows and cols parameters before proceeding
+    if rows is None or cols is None:
+        return "Invalid parameters: 'rows' and 'cols' are required"
+    try:
+        rows = int(rows)
+        cols = int(cols)
+    except (ValueError, TypeError):
+        return "Invalid parameters: 'rows' and 'cols' must be integers"
+    if rows <= 0 or cols <= 0:
+        return "Invalid parameters: 'rows' and 'cols' must be positive integers"
     
     # Check if file is writeable
     is_writeable, error_message = check_file_writeable(filename)
