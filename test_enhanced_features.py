@@ -122,7 +122,7 @@ async def test_enhanced_search_replace():
     
     # Test 1: Basic enhanced search and replace with formatting
     print("Test 1: Replace 'PCL' with formatted version...")
-    result = await enhanced_search_and_replace(
+    result = enhanced_search_and_replace(
         filename=filename,
         find_text="PCL",
         replace_text="PCL",
@@ -134,12 +134,12 @@ async def test_enhanced_search_replace():
     
     # Test 2: Format specific research terms
     print("\nTest 2: Format research paper terms...")
-    result = await format_research_paper_terms(filename)
+    result = format_research_paper_terms(filename)
     print(f"Result: {result}")
     
     # Test 3: Format statistical terms
     print("\nTest 3: Format statistical significance values...")
-    result = await format_specific_words(
+    result = format_specific_words(
         filename=filename,
         word_list=["p < 0.05", "r²", "±"],
         bold=True,
