@@ -263,16 +263,15 @@ async def add_text_content(
             
             try:
                 if position in ["end", "beginning"]:
-                    # Add at document level
-                    if position == "beginning":
-                        # Insert at beginning - need to use paragraph insertion
-                        new_paragraph = doc.paragraphs[0]._element.getparent().insert(0, doc.add_heading(text, level=level)._element)
-                        heading = doc.add_heading(text, level=level)
-                    else:
-                        heading = doc.add_heading(text, level=level)
-                    
+                    # Create the heading once
+                    heading = doc.add_heading(text, level=level)
                     created_element = heading
                     success_message = f"Heading '{text}' (level {level}) added"
+                    if position == "beginning":
+                        # Move heading element to the beginning
+                        body = doc._body._element
+                        body.remove(heading._element)
+                        body.insert(0, heading._element)
                 else:
                     # Insert at specific position
                     heading = doc.add_heading(text, level=level)
