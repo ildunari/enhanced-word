@@ -178,11 +178,11 @@ def customize_footnote_formatting(doc, footnote_refs, format_symbols, start_numb
     for para_idx, para in enumerate(doc.paragraphs):
         if para.text.startswith("Footnotes:") or para.text == "Footnotes":
             found_footnote_section = True
-            
+
             # Update footnotes with new symbols
-            for i in range(len(footnote_refs)):
+            for ref_idx in range(len(footnote_refs)):
                 try:
-                    footnote_para_idx = para_idx + i + 1
+                    footnote_para_idx = para_idx + ref_idx + 1
                     if footnote_para_idx < len(doc.paragraphs):
                         para = doc.paragraphs[footnote_para_idx]
                         
@@ -193,7 +193,7 @@ def customize_footnote_formatting(doc, footnote_refs, format_symbols, start_numb
                             footnote_text = footnote_text.split(" ", 1)[1]
                         
                         # Add new format
-                        idx = i + start_number - 1
+                        idx = ref_idx + start_number - 1
                         if idx < len(format_symbols):
                             symbol = format_symbols[idx]
                         else:
