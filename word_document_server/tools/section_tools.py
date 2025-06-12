@@ -336,14 +336,6 @@ async def get_sections(
                                 extract_run_formatting(run, formatting_detail)
                             )
                 
-                # Check if this matches target section (if specified)
-                title_match = False
-                if section_title:
-                    if case_sensitive:
-                        title_match = section_title in paragraph.text
-                    else:
-                        title_match = section_title.lower() in paragraph.text.lower()
-                
                 # Add to appropriate location
                 if heading_level == 1 or not sections:
                     sections.append(section_info)
