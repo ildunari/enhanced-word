@@ -4,7 +4,10 @@ Session management tools for Word Document Server.
 Provides MCP tools for managing document sessions with simple IDs,
 eliminating the need to pass full file paths for every operation.
 """
-from word_document_server.session_manager import get_session_manager
+from word_document_server.session_manager import (
+    DocumentSessionManager,
+    get_session_manager,
+)
 
 
 def open_document(document_id: str, file_path: str) -> str:
