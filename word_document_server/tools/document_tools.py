@@ -633,8 +633,8 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
             
             # Copy all paragraphs
             for paragraph in source_doc.paragraphs:
-                # Create a new paragraph with the same text and style
-                new_paragraph = target_doc.add_paragraph(paragraph.text)
+                # Create a new empty paragraph and replicate style
+                new_paragraph = target_doc.add_paragraph()
                 new_paragraph.style = target_doc.styles['Normal']  # Default style
                 
                 # Try to match the style if possible
@@ -644,17 +644,24 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
                 except:
                     pass
                 
-                # Copy run formatting
-                for i, run in enumerate(paragraph.runs):
-                    if i < len(new_paragraph.runs):
-                        new_run = new_paragraph.runs[i]
-                        # Copy basic formatting
-                        new_run.bold = run.bold
-                        new_run.italic = run.italic
-                        new_run.underline = run.underline
-                        # Font size if specified
-                        if run.font.size:
-                            new_run.font.size = run.font.size
+                # Copy each run individually to preserve formatting
+                for run in paragraph.runs:
+                    new_run = new_paragraph.add_run(run.text)
+                    new_run.bold = run.bold
+                    new_run.italic = run.italic
+                    new_run.underline = run.underline
+                    try:
+                        if run.font.name:
+                            new_run.font.name = run.font.name
+                    except Exception:
+                        pass
+                    if run.font.size:
+                        new_run.font.size = run.font.size
+                    try:
+                        if run.font.color.rgb:
+                            new_run.font.color.rgb = run.font.color.rgb
+                    except Exception:
+                        pass
             
             # Copy all tables
             for table in source_doc.tables:
