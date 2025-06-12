@@ -1154,10 +1154,10 @@ def create_style(doc, style_name, style_type, base_style=None, font_properties=N
     from docx.shared import Pt
     
     try:
-        # Check if style already exists
-        style = doc.styles.get_by_id(style_name, WD_STYLE_TYPE.PARAGRAPH)
+        # Check if style already exists using direct lookup
+        style = doc.styles[style_name]
         return style
-    except:
+    except KeyError:
         # Create new style
         new_style = doc.styles.add_style(style_name, style_type)
         
