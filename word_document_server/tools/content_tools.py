@@ -594,8 +594,8 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                                    match_case, whole_words_only, use_regex=False):
     """Helper function to replace text in paragraphs with optional formatting and regex support.
     
-    This implementation fixes the formatting over-application bug by creating 
-    new runs for replaced text instead of applying formatting to entire existing runs.
+    This implementation fixes the positioning bugs by properly inserting runs at their
+    correct positions instead of always appending to the end of the paragraph.
     Supports both literal text matching and regex pattern matching.
     """
     import re
@@ -633,7 +633,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             
         count += len(matches)
         
-        # Process matches from right to left to avoid position shifting
+        # Process matches from right to left to avoid position shifting during replacement
         for match in reversed(matches):
             start_pos = match.start()
             end_pos = match.end()
@@ -644,82 +644,132 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             else:
                 actual_replace_text = replace_text
             
-            # Find which runs contain this text span
+            # NEW APPROACH: Instead of modifying existing runs and appending new ones,
+            # we rebuild the runs in the correct order by collecting all run segments
+            # and then reconstructing the paragraph properly.
+            
+            # Collect all run segments with their formatting and positions
+            run_segments = []
             current_pos = 0
-            start_run_idx = None
-            end_run_idx = None
-            start_run_offset = 0
-            end_run_offset = 0
             
             for run_idx, run in enumerate(para.runs):
                 run_length = len(run.text)
+                run_start = current_pos
+                run_end = current_pos + run_length
                 
-                # Check if this run contains the start position
-                if start_run_idx is None and current_pos <= start_pos < current_pos + run_length:
-                    start_run_idx = run_idx
-                    start_run_offset = start_pos - current_pos
-                
-                # Check if this run contains the end position
-                if current_pos < end_pos <= current_pos + run_length:
-                    end_run_idx = run_idx
-                    end_run_offset = end_pos - current_pos
-                    break
+                # Determine how this run overlaps with the match
+                if run_end <= start_pos:
+                    # Run is completely before the match - keep as is
+                    if run.text:  # Only add non-empty runs
+                        run_segments.append({
+                            'text': run.text,
+                            'formatting': _extract_run_formatting(run),
+                            'type': 'keep'
+                        })
+                elif run_start >= end_pos:
+                    # Run is completely after the match - keep as is
+                    if run.text:  # Only add non-empty runs
+                        run_segments.append({
+                            'text': run.text,
+                            'formatting': _extract_run_formatting(run),
+                            'type': 'keep'
+                        })
+                else:
+                    # Run overlaps with the match - need to split it
                     
+                    # Part before the match
+                    if run_start < start_pos:
+                        before_text = run.text[:start_pos - run_start]
+                        if before_text:
+                            run_segments.append({
+                                'text': before_text,
+                                'formatting': _extract_run_formatting(run),
+                                'type': 'keep'
+                            })
+                    
+                    # The match replacement (only add once, when we encounter the first overlapping run)
+                    if not any(seg.get('type') == 'replacement' for seg in run_segments):
+                        replacement_formatting = _extract_run_formatting(run)
+                        if apply_formatting:
+                            # Apply new formatting on top of existing
+                            replacement_formatting.update({
+                                'bold': bold if bold is not None else replacement_formatting.get('bold'),
+                                'italic': italic if italic is not None else replacement_formatting.get('italic'),
+                                'underline': underline if underline is not None else replacement_formatting.get('underline'),
+                                'color': color if color else replacement_formatting.get('color'),
+                                'font_size': font_size if font_size else replacement_formatting.get('font_size'),
+                                'font_name': font_name if font_name else replacement_formatting.get('font_name')
+                            })
+                        
+                        run_segments.append({
+                            'text': actual_replace_text,
+                            'formatting': replacement_formatting,
+                            'type': 'replacement'
+                        })
+                    
+                    # Part after the match
+                    if run_end > end_pos:
+                        after_text = run.text[end_pos - run_start:]
+                        if after_text:
+                            run_segments.append({
+                                'text': after_text,
+                                'formatting': _extract_run_formatting(run),
+                                'type': 'keep'
+                            })
+                
                 current_pos += run_length
             
-            if start_run_idx is None or end_run_idx is None:
-                continue  # Skip if we can't locate the text properly
+            # Clear all existing runs
+            for _ in range(len(para.runs)):
+                para.runs[0]._element.getparent().remove(para.runs[0]._element)
             
-            # Replace text across the identified runs
-            if start_run_idx == end_run_idx:
-                # Text is within a single run - split it into three parts
-                run = para.runs[start_run_idx]
-                old_text = run.text
-                
-                # Split: before_text + replaced_text + after_text
-                before_text = old_text[:start_run_offset]
-                after_text = old_text[end_run_offset:]
-                
-                # Update original run with before_text
-                run.text = before_text
-                
-                # Create new run for replaced text with optional formatting
-                new_run = para.add_run(actual_replace_text)
-                if apply_formatting:
-                    _copy_run_formatting(run, new_run)  # Copy base formatting first
-                    _apply_formatting_to_run(new_run, bold, italic, underline, color, font_size, font_name)
-                else:
-                    _copy_run_formatting(run, new_run)  # Preserve original formatting
-                
-                # Create new run for after_text if there is any
-                if after_text:
-                    after_run = para.add_run(after_text)
-                    _copy_run_formatting(run, after_run)
-                    
-            else:
-                # Text spans multiple runs - more complex replacement
-                # Remove the matched text from all affected runs
-                for run_idx in range(start_run_idx, end_run_idx + 1):
-                    run = para.runs[run_idx]
-                    if run_idx == start_run_idx:
-                        # First run: keep text before match
-                        run.text = run.text[:start_run_offset]
-                    elif run_idx == end_run_idx:
-                        # Last run: keep text after match
-                        run.text = run.text[end_run_offset:]
-                    else:
-                        # Middle runs: clear completely
-                        run.text = ""
-                
-                # Add the replacement text as a new run after the first affected run
-                new_run = para.add_run(actual_replace_text)
-                if apply_formatting:
-                    _copy_run_formatting(para.runs[start_run_idx], new_run)
-                    _apply_formatting_to_run(new_run, bold, italic, underline, color, font_size, font_name)
-                else:
-                    _copy_run_formatting(para.runs[start_run_idx], new_run)
+            # Rebuild the paragraph with the correct run segments in order
+            for segment in run_segments:
+                if segment['text']:  # Only add non-empty segments
+                    new_run = para.add_run(segment['text'])
+                    _apply_run_formatting(new_run, segment['formatting'])
     
     return count
+
+
+def _extract_run_formatting(run):
+    """Extract formatting properties from a run."""
+    formatting = {}
+    try:
+        formatting['bold'] = run.bold
+        formatting['italic'] = run.italic
+        formatting['underline'] = run.underline
+        if run.font.name:
+            formatting['font_name'] = run.font.name
+        if run.font.size:
+            formatting['font_size'] = run.font.size.pt if run.font.size else None
+        if run.font.color.rgb:
+            formatting['color'] = str(run.font.color.rgb)
+    except Exception:
+        # If any formatting extraction fails, return basic formatting
+        pass
+    return formatting
+
+
+def _apply_run_formatting(run, formatting):
+    """Apply formatting properties to a run."""
+    try:
+        if 'bold' in formatting and formatting['bold'] is not None:
+            run.bold = formatting['bold']
+        if 'italic' in formatting and formatting['italic'] is not None:
+            run.italic = formatting['italic']
+        if 'underline' in formatting and formatting['underline'] is not None:
+            run.underline = formatting['underline']
+        if 'font_name' in formatting and formatting['font_name']:
+            run.font.name = formatting['font_name']
+        if 'font_size' in formatting and formatting['font_size']:
+            from docx.shared import Pt
+            run.font.size = Pt(formatting['font_size'])
+        if 'color' in formatting and formatting['color']:
+            _apply_color_to_run(run, formatting['color'])
+    except Exception:
+        # Silently continue if formatting fails
+        pass
 
 
 
@@ -818,7 +868,7 @@ def format_specific_words(filename: str, word_list: List[str],
     """Format specific words throughout the document using enhanced search and replace.
     
     Args:
-        filename: Path to the Word document
+        filename: Path to the Word document (resolved path from session management)
         word_list: List of words to format
         bold: Set text bold (True/False)
         italic: Set text italic (True/False)
@@ -834,8 +884,9 @@ def format_specific_words(filename: str, word_list: List[str],
     
     for word in word_list:
         # Use enhanced search and replace with same text for find and replace
+        # Pass filename directly since it's already resolved from session management
         result = enhanced_search_and_replace(
-            filename=filename,
+            filename=filename,  # Already resolved filename
             find_text=word,
             replace_text=word,  # Same text, just apply formatting
             apply_formatting=True,
@@ -851,6 +902,7 @@ def format_specific_words(filename: str, word_list: List[str],
         results.append(f"'{word}': {result}")
     
     return "\n".join(results)
+
 
 
 def format_research_paper_terms(filename: str) -> str:
@@ -877,7 +929,8 @@ def format_research_paper_terms(filename: str) -> str:
 
 def format_document(
     action: str,
-    filename: str,
+    filename: str = None,
+    document_id: str = None,
     word_list: Optional[List[str]] = None,
     bold: Optional[bool] = None,
     italic: Optional[bool] = None,
@@ -897,7 +950,8 @@ def format_document(
         action (str): Formatting operation to perform:
             - "words": Format specific words in document (requires word_list)
             - "research": Apply research paper formatting (automatic terms)
-        filename (str): Path to Word document
+        filename (str): Path to Word document (legacy, for backward compatibility)
+        document_id (str): Session document ID (preferred)
         word_list (List[str], optional): List of words to format (required for "words" action)
         bold (bool, optional): Set text bold (True/False)
         italic (bool, optional): Set text italic (True/False)
@@ -913,18 +967,25 @@ def format_document(
         
     Examples:
         # Format specific words with custom styling
-        format_document("words", "thesis.docx", 
+        format_document("words", document_id="thesis", 
                        word_list=["important", "critical", "significant"],
                        bold=True, color="red")
         
         # Apply research paper formatting
-        format_document("research", "research_paper.docx")
+        format_document("research", document_id="research_paper")
         
         # Format technical terms
-        format_document("words", "manual.docx",
+        format_document("words", document_id="manual",
                        word_list=["API", "SDK", "REST"],
                        font_name="Courier New", font_size=11)
     """
+    from word_document_server.utils.session_utils import resolve_document_path
+    
+    # Resolve document path from document_id or filename
+    filename, error_msg = resolve_document_path(document_id, filename)
+    if error_msg:
+        return error_msg
+    
     # Validate action parameter
     valid_actions = ["words", "research"]
     if action not in valid_actions:
@@ -955,3 +1016,4 @@ def format_document(
             
     except Exception as e:
         return f"Error in format_document: {str(e)}"
+
