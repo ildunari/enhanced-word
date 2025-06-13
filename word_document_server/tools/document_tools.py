@@ -667,7 +667,7 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
         return f"Failed to merge documents: {str(e)}"
 
 
-def document_utility(
+async def document_utility(
     action: str,
     document_id: str = None,
     filename: str = None,
@@ -703,7 +703,6 @@ def document_utility(
         # List Word documents in specific directory
         document_utility("list_files", "", "/Users/john/Documents")
     """
-    import asyncio
     from word_document_server.utils.session_utils import resolve_document_path
     
     # Validate action parameter
@@ -719,37 +718,15 @@ def document_utility(
     
     # Delegate to appropriate original function based on action
     try:
-        import asyncio
-        
         if action == "info":
-            # Proper async handling without threading anti-patterns
-            try:
-                loop = asyncio.get_running_loop()
-                # We're in a running loop, create task in existing loop
-                task = loop.create_task(get_document_info(filename))
-                return loop.run_until_complete(task)
-            except RuntimeError:
-                # No running loop, safe to use asyncio.run
-                return asyncio.run(get_document_info(filename))
-            
+            return await get_document_info(filename)
+
         elif action == "outline":
-            try:
-                loop = asyncio.get_running_loop()
-                # We're in a running loop, create task in existing loop
-                task = loop.create_task(get_document_outline(filename))
-                return loop.run_until_complete(task)
-            except RuntimeError:
-                return asyncio.run(get_document_outline(filename))
-            
+            return await get_document_outline(filename)
+
         elif action == "list_files":
-            search_dir = directory if directory else "."
-            try:
-                loop = asyncio.get_running_loop()
-                # We're in a running loop, create task in existing loop
-                task = loop.create_task(list_available_documents(search_dir))
-                return loop.run_until_complete(task)
-            except RuntimeError:
-                return asyncio.run(list_available_documents(search_dir))
-            
+            search_dir = directory or "."
+            return await list_available_documents(search_dir)
+
     except Exception as e:
         return f"Error in document_utility: {str(e)}"
