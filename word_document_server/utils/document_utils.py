@@ -150,8 +150,10 @@ def find_and_replace_text(doc, old_text, new_text):
         if old_text in para.text:
             for run in para.runs:
                 if old_text in run.text:
-                    run.text = run.text.replace(old_text, new_text)
-                    count += 1
+                    occurrences = run.text.count(old_text)
+                    if occurrences:
+                        run.text = run.text.replace(old_text, new_text)
+                        count += occurrences
     
     # Search in tables
     for table in doc.tables:
@@ -161,7 +163,9 @@ def find_and_replace_text(doc, old_text, new_text):
                     if old_text in para.text:
                         for run in para.runs:
                             if old_text in run.text:
-                                run.text = run.text.replace(old_text, new_text)
-                                count += 1
+                                occurrences = run.text.count(old_text)
+                                if occurrences:
+                                    run.text = run.text.replace(old_text, new_text)
+                                    count += occurrences
     
     return count

@@ -166,8 +166,8 @@ def manage_comments(
                 # Find all comment markers in this paragraph
                 import re
                 # Pattern matches: [COMMENT-12345678 by Author: comment text] or [RESOLVED-12345678 by Author: comment text]
-                pattern = r'\[(COMMENT|RESOLVED)-([a-f0-9]{8}) by ([^:]+): ([^\]]+)\]'
-                matches = re.findall(pattern, text)
+                pattern = r'\[(COMMENT|RESOLVED)-([A-Fa-f0-9]{8}) by ([^:]+): ([^\]]+)\]'
+                matches = re.findall(pattern, text, flags=re.IGNORECASE)
                 
                 for match in matches:
                     status, comment_id, author_name, comment_content = match

@@ -9,6 +9,7 @@ import json
 from typing import List, Optional, Dict, Any
 from docx import Document
 from docx.shared import Inches, Pt
+import re
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.utils.session_utils import resolve_document_path
@@ -307,11 +308,10 @@ async def get_sections(
         for i, paragraph in enumerate(paragraphs):
             # Check if paragraph is a heading
             heading_level = None
-            if paragraph.style and paragraph.style.name.startswith('Heading'):
-                try:
-                    heading_level = int(paragraph.style.name.replace('Heading ', ''))
-                except ValueError:
-                    continue
+            if paragraph.style and paragraph.style.name:
+                match = re.search(r'Heading\s*(\d+)', paragraph.style.name, re.IGNORECASE)
+                if match:
+                    heading_level = int(match.group(1))
             
             if heading_level and heading_level <= max_level:
                 # This is a heading - start new section or subsection

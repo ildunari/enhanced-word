@@ -5,6 +5,7 @@ These tools add various types of content to Word documents,
 including headings, paragraphs, tables, images, and page breaks.
 """
 import os
+import re
 from typing import List, Optional
 from docx import Document
 from docx.shared import Inches, Pt
@@ -472,9 +473,6 @@ async def add_picture(document_id: str = None, filename: str = None, image_path:
         return f"Document processing error: {error_type} - {error_msg or 'No error details available'}"
 
 
-
-
-
 def enhanced_search_and_replace(document_id: str = None, filename: str = None, 
                                     find_text: str = None, replace_text: str = None,
                                     apply_formatting: bool = False,
@@ -606,8 +604,6 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         return f"Failed to search and replace: {str(e)}"
 
 
-
-
 def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_formatting,
                                    bold, italic, underline, color, font_size, font_name,
                                    match_case, whole_words_only, use_regex=False):
@@ -626,11 +622,12 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
         
         # Create search pattern based on options
         if use_regex:
-            try:
-                pattern = find_text
-                flags = re.IGNORECASE if not match_case else 0
-            except re.error:
-                continue  # Skip invalid regex patterns
+            # Respect whole_words_only even in regex mode by wrapping pattern
+            pattern = find_text
+            if whole_words_only:
+                pattern = rf"\b(?:{pattern})\b"
+
+            flags = re.IGNORECASE if not match_case else 0
         else:
             # Escape special regex characters for literal matching
             escaped_text = re.escape(find_text)
@@ -656,9 +653,10 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             start_pos = match.start()
             end_pos = match.end()
             
-            # For regex, get the actual replacement text (may include group substitutions)
+            # For regex, translate JS back-refs then expand groups
             if use_regex:
-                actual_replace_text = match.expand(replace_text)
+                converted_repl = _convert_js_backreferences(replace_text)
+                actual_replace_text = match.expand(converted_repl)
             else:
                 actual_replace_text = replace_text
             
@@ -743,7 +741,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             
             # Rebuild the paragraph with the correct run segments in order
             for segment in run_segments:
-                if segment['text']:  # Only add non-empty segments
+                if segment['text']:
                     new_run = para.add_run(segment['text'])
                     _apply_run_formatting(new_run, segment['formatting'])
     
@@ -790,10 +788,6 @@ def _apply_run_formatting(run, formatting):
         pass
 
 
-
-
-
-
 def _apply_color_to_run(run, color):
     """Apply color to a run with error handling."""
     from docx.shared import RGBColor
@@ -824,12 +818,15 @@ def _apply_color_to_run(run, color):
         if color.lower() in color_map:
             run.font.color.rgb = color_map[color.lower()]
         else:
-            # Try to parse as hex color (e.g., "#FF0000")
-            if color.startswith('#') and len(color) == 7:
-                hex_color = color[1:]
-                r = int(hex_color[0:2], 16)
-                g = int(hex_color[2:4], 16)
-                b = int(hex_color[4:6], 16)
+            # Accept 3- or 6-digit hex codes, with or without '#', any case
+            hex_code = color.lstrip('#')
+            if len(hex_code) == 3:  # expand shorthand #FFF → #FFFFFF
+                hex_code = ''.join(ch * 2 for ch in hex_code)
+
+            if re.fullmatch(r'[0-9A-Fa-f]{6}', hex_code):
+                r = int(hex_code[0:2], 16)
+                g = int(hex_code[2:4], 16)
+                b = int(hex_code[4:6], 16)
                 run.font.color.rgb = RGBColor(r, g, b)
             else:
                 # Default to black if color not recognized
@@ -885,7 +882,6 @@ def format_specific_words(filename: str, word_list: List[str],
         results.append(f"'{word}': {result}")
     
     return "\n".join(results)
-
 
 
 def format_research_paper_terms(filename: str) -> str:
@@ -999,4 +995,29 @@ def format_document(
             
     except Exception as e:
         return f"Error in format_document: {str(e)}"
+
+
+# ---------------------------------------------------------------------------
+# Helper: convert JavaScript-style regex replacement markers ($&,$1,$2, ...) to
+# Python `re` syntax (\g<0>, \g<1>, ...). This allows end-users coming from
+# JS/VS Code to keep familiar notation while leveraging Python's engine.
+# ---------------------------------------------------------------------------
+
+
+def _convert_js_backreferences(repl: str) -> str:
+    """Translate $& and $1…$99 tokens to Python replacement notation.
+
+    Example:
+        "$&"  -> "\\g<0>"
+        "$1_$2" -> "\\g<1>_\\g<2>"
+    """
+
+    # Replace $& (whole match) first to avoid interference with $1..
+    repl = repl.replace("$&", r"\g<0>")
+
+    # Replace numbered groups – supports up to two-digit back-refs
+    def _num_sub(m):
+        return rf"\g<{m.group(1)}>"
+
+    return re.sub(r"\$(\d{1,2})", _num_sub, repl)
 
