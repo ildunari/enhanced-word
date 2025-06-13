@@ -484,7 +484,13 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                                     font_name: Optional[str] = None,
                                     match_case: bool = True,
                                     whole_words_only: bool = False,
-                                    use_regex: bool = False) -> str:
+                                    use_regex: bool = False,
+                                    start_paragraph: Optional[int] = None,
+                                    end_paragraph: Optional[int] = None,
+                                    paragraph_indices: Optional[List[int]] = None,
+                                    occurrence_index: Optional[int] = None,
+                                    char_start: Optional[int] = None,
+                                    char_end: Optional[int] = None) -> str:
     """Enhanced search and replace with formatting options, regex support, and case-insensitive matching.
     
     Provides powerful text replacement capabilities with:
@@ -509,6 +515,12 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         match_case: Whether to match case exactly (default True, ignored if use_regex=True)
         whole_words_only: Whether to match whole words only (default False)
         use_regex: Enable regex pattern matching (default False)
+        start_paragraph: Start paragraph index for range filtering
+        end_paragraph: End paragraph index for range filtering
+        paragraph_indices: List of paragraph indices to filter
+        occurrence_index: Target occurrence index for filtering
+        char_start: Start character index for range filtering
+        char_end: End character index for range filtering
     
     Returns:
         Status message with replacement count and details
@@ -557,6 +569,19 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     if not is_writeable:
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
+    # Validate range / occurrence parameters (Tier-1 & Tier-2)
+    if paragraph_indices is not None and (start_paragraph is not None or end_paragraph is not None):
+        return "Error: paragraph_indices cannot be combined with start_paragraph/end_paragraph"
+
+    if occurrence_index is not None and occurrence_index < 1:
+        return "Error: occurrence_index must be >= 1"
+
+    if (char_start is not None or char_end is not None) and paragraph_indices is None and start_paragraph is None and end_paragraph is None:
+        return "Error: char_start/char_end require a paragraph range to be specified"
+
+    if char_start is not None and char_end is not None and char_end < char_start:
+        return "Error: char_end cannot be less than char_start"
+
     # Validate regex pattern if using regex
     if use_regex:
         try:
@@ -570,19 +595,81 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     try:
         doc = Document(filename)
         
-        count = _enhanced_replace_in_paragraphs(doc.paragraphs, find_text, replace_text, 
-                                              apply_formatting, bold, italic, underline, 
-                                              color, font_size, font_name, match_case, 
-                                              whole_words_only, use_regex)
-        
+        # Determine which paragraphs to process
+        total_paragraphs = len(doc.paragraphs)
+        if paragraph_indices is not None:
+            target_paragraphs = sorted(set(paragraph_indices))
+        else:
+            start_idx = start_paragraph if start_paragraph is not None else 0
+            end_idx = end_paragraph if end_paragraph is not None else total_paragraphs - 1
+            if start_idx < 0 or end_idx >= total_paragraphs or start_idx > end_idx:
+                return f"Invalid paragraph range. Document has {total_paragraphs} paragraphs (0-{total_paragraphs-1})"
+            target_paragraphs = list(range(start_idx, end_idx + 1))
+
+        # Global occurrence counter
+        current_occurrence = 0
+
+        def process_para(p_idx, paragraph_list):
+            nonlocal current_occurrence, count
+            if p_idx not in target_paragraphs:
+                return
+            import re
+            para_text_combined = "\n".join([p.text for p in paragraph_list])
+            if use_regex:
+                pattern_tmp = find_text
+                if whole_words_only:
+                    pattern_tmp = rf"\b(?:{pattern_tmp})\b"
+                flags_tmp = re.IGNORECASE if not match_case else 0
+            else:
+                escaped = re.escape(find_text)
+                pattern_tmp = rf"\b{escaped}\b" if whole_words_only else escaped
+                flags_tmp = re.IGNORECASE if not match_case else 0
+            try:
+                total_matches_para = len(list(re.finditer(pattern_tmp, para_text_combined, flags_tmp)))
+            except re.error:
+                total_matches_para = 0
+
+            # Determine if this paragraph contains the target occurrence
+            local_target = None
+            if occurrence_index is not None:
+                if current_occurrence + total_matches_para < occurrence_index:
+                    # target occurs later; just advance counter
+                    current_occurrence += total_matches_para
+                    return
+                else:
+                    local_target = occurrence_index - current_occurrence
+
+            replace_count, match_count = _enhanced_replace_in_paragraphs(
+                paragraph_list,
+                find_text,
+                replace_text,
+                apply_formatting,
+                bold,
+                italic,
+                underline,
+                color,
+                font_size,
+                font_name,
+                match_case,
+                whole_words_only,
+                use_regex,
+                target_occurrence=local_target,
+                char_start=char_start,
+                char_end=char_end,
+            )
+            current_occurrence += match_count
+            count += replace_count
+
+        count = 0
+        # Process body paragraphs
+        for idx, para in enumerate(doc.paragraphs):
+            process_para(idx, [para])
+
         # Search in tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
-                    count += _enhanced_replace_in_paragraphs(cell.paragraphs, find_text, replace_text,
-                                                           apply_formatting, bold, italic, underline,
-                                                           color, font_size, font_name, match_case, 
-                                                           whole_words_only, use_regex)
+                    process_para(idx, cell.paragraphs)
         
         if count > 0:
             doc.save(filename)
@@ -606,7 +693,9 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
 
 def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_formatting,
                                    bold, italic, underline, color, font_size, font_name,
-                                   match_case, whole_words_only, use_regex=False):
+                                   match_case, whole_words_only, use_regex=False,
+                                   target_occurrence=None,
+                                   char_start=None, char_end=None):
     """Helper function to replace text in paragraphs with optional formatting and regex support.
     
     This implementation fixes the positioning bugs by properly inserting runs at their
@@ -642,14 +731,30 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             matches = list(re.finditer(pattern, para_text, flags))
         except re.error:
             continue  # Skip if pattern compilation fails
-            
+        match_total = len(matches)
+
         if not matches:
             continue
             
-        count += len(matches)
+        matches_to_apply = []
+        for m in matches:
+            # Character-range gating
+            if char_start is not None and char_end is not None:
+                if not (char_start <= m.start() and m.end() <= char_end):
+                    continue
+            # occurrence gating (relative to this paragraph)
+            if target_occurrence is not None:
+                if len(matches_to_apply) + 1 != target_occurrence:
+                    continue
+            matches_to_apply.append(m)
+
+        if not matches_to_apply:
+            continue
+
+        count += len(matches_to_apply)
         
         # Process matches from right to left to avoid position shifting during replacement
-        for match in reversed(matches):
+        for match in reversed(matches_to_apply):
             start_pos = match.start()
             end_pos = match.end()
             
@@ -781,7 +886,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                     new_run = para.add_run(segment['text'])
                     _apply_run_formatting(new_run, segment['formatting'])
     
-    return count
+    return count, match_total
 
 
 def _extract_run_formatting(run):
@@ -873,14 +978,15 @@ def _apply_color_to_run(run, color):
 
 
 def format_specific_words(filename: str, word_list: List[str], 
-                               bold: Optional[bool] = None,
-                               italic: Optional[bool] = None,
-                               underline: Optional[bool] = None,
-                               color: Optional[str] = None,
-                               font_size: Optional[int] = None,
-                               font_name: Optional[str] = None,
-                               match_case: bool = True,
-                               whole_words_only: bool = True) -> str:
+                                bold: Optional[bool] = None,
+                                italic: Optional[bool] = None,
+                                underline: Optional[bool] = None,
+                                color: Optional[str] = None,
+                                font_size: Optional[int] = None,
+                                font_name: Optional[str] = None,
+                                match_case: bool = True,
+                                whole_words_only: bool = True,
+                                **extra_kwargs) -> str:
     """Format specific words throughout the document using enhanced search and replace.
     
     Args:
@@ -912,7 +1018,8 @@ def format_specific_words(filename: str, word_list: List[str],
             font_size=font_size,
             font_name=font_name,
             match_case=match_case,
-            whole_words_only=whole_words_only
+            whole_words_only=whole_words_only,
+            **extra_kwargs
         )
         results.append(f"'{word}': {result}")
     
@@ -960,7 +1067,8 @@ def format_document(
     font_size: Optional[int] = None,
     font_name: Optional[str] = None,
     match_case: bool = True,
-    whole_words_only: bool = True
+    whole_words_only: bool = True,
+    **extra_kwargs
 ) -> str:
     """Unified document formatting function for specialized formatting operations.
     
@@ -1029,7 +1137,8 @@ def format_document(
                 font_size=font_size,
                 font_name=font_name,
                 match_case=match_case,
-                whole_words_only=whole_words_only
+                whole_words_only=whole_words_only,
+                **extra_kwargs
             )
             
         elif action == "research":
