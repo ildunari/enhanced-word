@@ -770,6 +770,10 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                         if seg['text'] == "":
                             # Entire segment became empty → skip it
                             continue
+                    # NEW: If previous ends with space and current begins with punctuation, trim the trailing space.
+                    punctuation_chars = '.!,?:;)'  # extend as needed
+                    if prev['text'].endswith(' ') and seg['text'][0] in punctuation_chars:
+                        prev['text'] = prev['text'].rstrip()
                 cleaned_segments.append(seg)
 
             for segment in cleaned_segments:
