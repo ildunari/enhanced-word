@@ -287,10 +287,10 @@ async def get_text(
                 "snap_to_grid": run.font.snap_to_grid,
                 "spec_vanish": run.font.spec_vanish,
                 "web_hidden": run.font.web_hidden,
-                "cs_bold": run.font.cs_bold,
-                "cs_italic": run.font.cs_italic,
-                "east_asia_font": run.font.name_east_asia,
-                "complex_script_font": run.font.name_cs,
+                "cs_bold": getattr(run.font, 'cs_bold', None),
+                "cs_italic": getattr(run.font, 'cs_italic', None),
+                "east_asia_font": getattr(run.font, 'name_east_asia', None),
+                "complex_script_font": getattr(run.font, 'name_cs', None),
             })
         
         # Clean up None values for cleaner output

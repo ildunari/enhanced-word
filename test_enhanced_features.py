@@ -26,12 +26,14 @@ from word_document_server.tools.section_tools import (
 )
 
 # Path to the generated test document
-TEST_FILENAME = None
+# NOTE: Each test function creates its own test document to avoid race conditions
 
 
 def create_test_document():
     """Create a test document for demonstrating enhanced features."""
-    filename = "test_enhanced_features.docx"
+    import time
+    timestamp = int(time.time() * 1000)  # Millisecond timestamp
+    filename = f"test_enhanced_features_{timestamp}.docx"
     
     # Create a document with academic content
     doc = Document()
@@ -118,9 +120,8 @@ def test_enhanced_search_replace():
     """Test the enhanced search and replace functionality."""
     print("\n=== TESTING ENHANCED SEARCH AND REPLACE ===")
 
-    global TEST_FILENAME
-    TEST_FILENAME = create_test_document()
-    filename = TEST_FILENAME
+    # Create test document for this test
+    filename = create_test_document()
     
     # Test 1: Basic enhanced search and replace with formatting
     print("Test 1: Replace 'PCL' with formatted version...")
@@ -165,9 +166,11 @@ def test_review_tools():
     """Test the review and collaboration tools."""
     print("\n=== TESTING REVIEW TOOLS ===")
     
+    # Create test document for this test
+    filename = create_test_document()
+    
     # Test 1: Add a comment
     print("Test 1: Adding a comment to the abstract...")
-    filename = TEST_FILENAME
     result = manage_comments(
         filename=filename,
         action="add",
@@ -197,9 +200,11 @@ def test_section_tools():
     """Test the section management tools."""
     print("\n=== TESTING SECTION MANAGEMENT TOOLS ===")
     
+    # Create test document for this test
+    filename = create_test_document()
+    
     # Test 1: Extract sections by heading
     print("Test 1: Extracting document sections...")
-    filename = TEST_FILENAME
     result = asyncio.run(get_sections(filename=filename, mode="overview"))
     print(f"Result: {result}")
     

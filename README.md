@@ -128,6 +128,18 @@ npx enhanced-word-mcp-server
 npm install -g enhanced-word-mcp-server
 ```
 
+### Python Dependencies
+
+The server requires Python 3.10+ with the following dependencies:
+
+```bash
+# Install Python dependencies (including MCP with CLI support)
+pip install mcp[cli] python-docx msoffcrypto-tool docx2pdf
+
+# Or install from requirements.txt if cloning the repository
+pip install -r requirements.txt
+```
+
 ### Add to Claude Desktop
 
 Add to your `claude_desktop_config.json`:

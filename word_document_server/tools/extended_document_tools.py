@@ -10,7 +10,7 @@ import shutil
 from typing import Optional
 from docx import Document
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, sanitize_file_path
 from word_document_server.utils.session_utils import resolve_document_path
 
 
@@ -30,6 +30,12 @@ async def convert_to_pdf(document_id: str = None, filename: str = None, output_f
     
     filename = ensure_docx_extension(filename)
     
+    # Sanitize the file path to prevent command injection
+    is_valid, sanitized_filename, error = sanitize_file_path(filename, allowed_extensions=['.docx', '.doc'])
+    if not is_valid:
+        return f"Invalid file path: {error}"
+    filename = sanitized_filename
+    
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
     
@@ -39,6 +45,12 @@ async def convert_to_pdf(document_id: str = None, filename: str = None, output_f
         output_filename = f"{base_name}.pdf"
     elif not output_filename.lower().endswith('.pdf'):
         output_filename = f"{output_filename}.pdf"
+    
+    # Sanitize output filename
+    is_valid, sanitized_output, error = sanitize_file_path(output_filename, allowed_extensions=['.pdf'])
+    if not is_valid:
+        return f"Invalid output file path: {error}"
+    output_filename = sanitized_output
     
     # Convert to absolute path if not already
     if not os.path.isabs(output_filename):

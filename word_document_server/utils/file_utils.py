@@ -132,7 +132,7 @@ def create_document_copy(source_path: str, dest_path: Optional[str] = None) -> T
 
 def ensure_docx_extension(filename: str) -> str:
     """
-    Ensure filename has .docx extension.
+    Ensure filename has .docx extension (case-insensitive check).
     
     Args:
         filename: The filename to check
@@ -140,9 +140,10 @@ def ensure_docx_extension(filename: str) -> str:
     Returns:
         Filename with .docx extension
     """
-    if not filename.endswith('.docx'):
+    if not filename.lower().endswith('.docx'):
         return filename + '.docx'
     return filename
+
 
 def sanitize_file_path(filepath: str, allowed_extensions: List[str] = None) -> Tuple[bool, str, str]:
     """

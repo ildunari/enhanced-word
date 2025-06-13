@@ -179,6 +179,10 @@ class DocumentSessionManager:
         """
         Get a document handle by ID.
         
+        WARNING: This returns a handle containing the live Document object.
+        Callers can directly mutate the document, bypassing any access control.
+        Future versions should provide controlled access methods instead.
+        
         Args:
             document_id: ID of the document to retrieve
             

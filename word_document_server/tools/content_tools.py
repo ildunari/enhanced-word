@@ -659,6 +659,20 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                 actual_replace_text = match.expand(converted_repl)
             else:
                 actual_replace_text = replace_text
+                # For case-insensitive matching, preserve the original case pattern
+                if not match_case:
+                    matched_text = para_text[start_pos:end_pos]
+                    actual_replace_text = _preserve_case(matched_text, actual_replace_text)
+                
+                # Handle space collapsing when deleting text
+                if replace_text == "":
+                    # Check if we have spaces before and after the match
+                    has_space_before = start_pos > 0 and para_text[start_pos - 1].isspace()
+                    has_space_after = end_pos < len(para_text) and para_text[end_pos].isspace()
+                    
+                    # If we have spaces on both sides, keep one space
+                    if has_space_before and has_space_after:
+                        actual_replace_text = " "
             
             # NEW APPROACH: Instead of modifying existing runs and appending new ones,
             # we rebuild the runs in the correct order by collecting all run segments
@@ -668,7 +682,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             run_segments = []
             current_pos = 0
             
-            for run_idx, run in enumerate(para.runs):
+            for run in para.runs:
                 run_length = len(run.text)
                 run_start = current_pos
                 run_end = current_pos + run_length
@@ -859,7 +873,6 @@ def format_specific_words(filename: str, word_list: List[str],
         match_case: Whether to match case (default True)
         whole_words_only: Whether to match whole words only (default True)
     """
-    total_count = 0
     results = []
     
     for word in word_list:
@@ -887,23 +900,30 @@ def format_specific_words(filename: str, word_list: List[str],
 def format_research_paper_terms(filename: str) -> str:
     """Format common research terms in a PCL paper with appropriate styling - Academic research helper."""
     
+    results = []
+    
     # Format drug names in blue and bold
     drug_names = ["dolutegravir", "meloxicam", "dexamethasone", "DTG", "MLX", "DEX"]
-    format_specific_words(filename, drug_names, bold=True, color="blue")
+    result = format_specific_words(filename, drug_names, bold=True, color="blue")
+    results.append("Drug names: " + result)
     
     # Format polymer terms in green
     polymer_terms = ["polycaprolactone", "PCL", "mesophase", "crystallinity"]
-    format_specific_words(filename, polymer_terms, color="green")
+    result = format_specific_words(filename, polymer_terms, color="green")
+    results.append("Polymer terms: " + result)
     
     # Format statistical terms in red and italic
     stats_terms = ["p < 0.05", "significant", "correlation", "ANOVA"]
-    format_specific_words(filename, stats_terms, italic=True, color="red")
+    result = format_specific_words(filename, stats_terms, italic=True, color="red")
+    results.append("Statistical terms: " + result)
     
     # Format temperature values in orange
     temp_terms = ["25°C", "50°C"]
-    format_specific_words(filename, temp_terms, color="orange")
+    result = format_specific_words(filename, temp_terms, color="orange")
+    results.append("Temperature values: " + result)
     
-    return "Research paper terms formatted successfully!"
+    return "Research paper terms formatted:\n" + "\n".join(results)
+
 
 
 def format_document(
@@ -1021,3 +1041,39 @@ def _convert_js_backreferences(repl: str) -> str:
 
     return re.sub(r"\$(\d{1,2})", _num_sub, repl)
 
+def _preserve_case(original_text: str, replacement_text: str) -> str:
+    """Preserve the case pattern from original text in the replacement text.
+    
+    Args:
+        original_text: The original text whose case pattern should be preserved
+        replacement_text: The replacement text to apply the case pattern to
+        
+    Returns:
+        The replacement text with the case pattern from the original text
+    """
+    if not original_text or not replacement_text:
+        return replacement_text
+    
+    # Check case patterns
+    if original_text.isupper():
+        # All uppercase
+        return replacement_text.upper()
+    elif original_text.islower():
+        # All lowercase
+        return replacement_text.lower()
+    elif original_text[0].isupper() and original_text[1:].islower():
+        # Title case
+        return replacement_text.capitalize()
+    else:
+        # Mixed case - preserve character-by-character where possible
+        result = []
+        for i, char in enumerate(replacement_text):
+            if i < len(original_text):
+                if original_text[i].isupper():
+                    result.append(char.upper())
+                else:
+                    result.append(char.lower())
+            else:
+                # Beyond original length, keep replacement as-is
+                result.append(char)
+        return ''.join(result)
