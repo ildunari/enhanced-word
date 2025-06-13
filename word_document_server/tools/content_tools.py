@@ -754,7 +754,25 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                 para.runs[0]._element.getparent().remove(para.runs[0]._element)
             
             # Rebuild the paragraph with the correct run segments in order
-            for segment in run_segments:
+            # Collapse duplicate spaces across segment boundaries to avoid
+            # "double-space" artifacts when replacement text is an empty string.
+            cleaned_segments = []
+            for seg in run_segments:
+                # Skip segments with empty text (already handled by check below)
+                if seg['text'] == "":
+                    continue
+                if cleaned_segments:
+                    prev = cleaned_segments[-1]
+                    # If previous ends with space and current starts with space → trim one
+                    if prev['text'].endswith(' ') and seg['text'].startswith(' '):
+                        # Prefer to strip the leading spaces of the current segment to keep formatting of previous run unchanged
+                        seg['text'] = seg['text'].lstrip()
+                        if seg['text'] == "":
+                            # Entire segment became empty → skip it
+                            continue
+                cleaned_segments.append(seg)
+
+            for segment in cleaned_segments:
                 if segment['text']:
                     new_run = para.add_run(segment['text'])
                     _apply_run_formatting(new_run, segment['formatting'])
