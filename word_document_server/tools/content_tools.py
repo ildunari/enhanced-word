@@ -659,7 +659,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
             )
             current_occurrence += match_count
             count += replace_count
-
+    
         count = 0
         # Process body paragraphs
         for idx, para in enumerate(doc.paragraphs):
@@ -705,6 +705,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
     import re
     
     count = 0
+    match_total_overall = 0  # total matches found (ignores char-range / occurrence filters)
     
     for para in paragraphs:
         para_text = para.text
@@ -731,22 +732,32 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             matches = list(re.finditer(pattern, para_text, flags))
         except re.error:
             continue  # Skip if pattern compilation fails
-        match_total = len(matches)
+        para_match_total = len(matches)
+        match_total_overall += para_match_total
 
         if not matches:
             continue
             
         matches_to_apply = []
-        for m in matches:
+        occurrence_counter = 0  # counts matches that pass char-range gating
+
+        for idx, m in enumerate(matches, start=1):
             # Character-range gating
             if char_start is not None and char_end is not None:
                 if not (char_start <= m.start() and m.end() <= char_end):
-                    continue
-            # occurrence gating (relative to this paragraph)
-            if target_occurrence is not None:
-                if len(matches_to_apply) + 1 != target_occurrence:
-                    continue
+                    continue  # do NOT count this occurrence toward counter
+            # Increment occurrence counter *after* char-range gate
+            occurrence_counter += 1
+
+            # Occurrence-specific gating
+            if target_occurrence is not None and occurrence_counter != target_occurrence:
+                continue
+
             matches_to_apply.append(m)
+
+            # If we were targeting a single specific occurrence, we can stop after grabbing it
+            if target_occurrence is not None:
+                break
 
         if not matches_to_apply:
             continue
@@ -886,7 +897,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                     new_run = para.add_run(segment['text'])
                     _apply_run_formatting(new_run, segment['formatting'])
     
-    return count, match_total
+    return count, match_total_overall
 
 
 def _extract_run_formatting(run):
