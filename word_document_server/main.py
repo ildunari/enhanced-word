@@ -15,7 +15,8 @@ from word_document_server.tools import (
     review_tools,
     section_tools,
     session_tools,
-    undo_tools
+    undo_tools,
+    equation_tools,
 )
 
 
@@ -116,6 +117,9 @@ def register_tools():
     # ========== UNDO / REDO (1) ==========
     # Provides history management while keeping total tool count <= 25
     mcp.tool()(undo_tools.session_undo)
+
+    # ========== EQUATION INSERTION (1) ==========
+    mcp.tool()(equation_tools.insert_equation)
 
 
 

@@ -8,7 +8,7 @@ Version 2.2.0 - Consolidated & Enhanced
 """
 
 # ========== CONSOLIDATED TOOLS ==========
-# These are the unified tools that replace numerous legacy functions; total registered tools = 23.
+# These are the unified tools that replace numerous legacy functions; total registered tools = 24.
 
 # Document tools - consolidated
 from word_document_server.tools.document_tools import (
@@ -77,6 +77,9 @@ from word_document_server.tools.session_tools import (
 # Undo / Redo tool (single entry for multiple actions)
 from word_document_server.tools.undo_tools import session_undo  # noqa: F401
 
+# Equation tool
+from word_document_server.tools.equation_tools import insert_equation  # noqa: F401
+
 # Export consolidated tool list for reference
 CONSOLIDATED_TOOLS = [
     # 3 Consolidated Wrapper Tools (replaces 10 original tools)
@@ -102,7 +105,8 @@ CONSOLIDATED_TOOLS = [
     'format_specific_words', 'format_research_paper_terms',
 
     # New undo/redo capability
-    'session_undo'
+    'session_undo',
+    'insert_equation'
 ]
 
 # Total: 23 tools registered after adding undo/redo (still under 25)
