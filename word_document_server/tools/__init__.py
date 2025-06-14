@@ -8,7 +8,7 @@ Version 2.2.0 - Consolidated & Enhanced
 """
 
 # ========== CONSOLIDATED TOOLS ==========
-# These are the new unified tools that replace multiple legacy functions
+# These are the unified tools that replace numerous legacy functions; total registered tools = 23.
 
 # Document tools - consolidated
 from word_document_server.tools.document_tools import (
@@ -74,6 +74,9 @@ from word_document_server.tools.session_tools import (
     close_all_documents
 )
 
+# Undo / Redo tool (single entry for multiple actions)
+from word_document_server.tools.undo_tools import session_undo  # noqa: F401
+
 # Export consolidated tool list for reference
 CONSOLIDATED_TOOLS = [
     # 3 Consolidated Wrapper Tools (replaces 10 original tools)
@@ -96,11 +99,14 @@ CONSOLIDATED_TOOLS = [
     # Legacy tools (for backward compatibility - not registered in main.py)
     'open_document', 'close_document', 'list_open_documents', 'set_active_document', 'close_all_documents',
     'get_document_info', 'get_document_outline', 'list_available_documents',
-    'format_specific_words', 'format_research_paper_terms'
+    'format_specific_words', 'format_research_paper_terms',
+
+    # New undo/redo capability
+    'session_undo'
 ]
 
-# Total: 22 tools registered (3 consolidated + 6 unified + 7 essential + 5 advanced + 1 convert_to_pdf)
-REGISTERED_TOOL_COUNT = 22
-TOTAL_TOOL_COUNT = len(CONSOLIDATED_TOOLS)
+# Total: 23 tools registered after adding undo/redo (still under 25)
+REGISTERED_TOOL_COUNT = len(CONSOLIDATED_TOOLS)
+TOTAL_TOOL_COUNT = REGISTERED_TOOL_COUNT
 
 __all__ = CONSOLIDATED_TOOLS + ['CONSOLIDATED_TOOLS', 'TOTAL_TOOL_COUNT']

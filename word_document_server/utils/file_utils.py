@@ -96,6 +96,23 @@ def check_file_writeable(filepath: str) -> Tuple[bool, str]:
         
         # Clean up temp file
         os.unlink(temp_path) if os.path.exists(temp_path) else None
+
+        # --------------------------------------------------------------
+        # Capture undo snapshot *after* we have verified the file can be
+        # written to but *before* the caller mutates the document.  This
+        # guarantees that every successful modification path has a
+        # corresponding restore point.
+        # --------------------------------------------------------------
+        try:
+            from word_document_server.undo_manager import get_undo_manager
+
+            if filepath.lower().endswith((".docx", ".doc")) and os.path.isfile(filepath):
+                undo_mgr = get_undo_manager()
+                undo_mgr.snapshot(filepath)
+        except Exception:
+            # We never want undo bookkeeping to block the actual operation.
+            pass
+
         return True, ""
         
     except Exception as e:
