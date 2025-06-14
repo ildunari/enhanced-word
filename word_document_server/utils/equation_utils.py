@@ -120,6 +120,8 @@ def latex_to_omml(latex: str) -> Tuple[bool, str]:
 
     try:
         mathml_str = latex2mathml_convert(latex)
+        if not mathml_str:
+            return False, "latex2mathml returned empty result"
     except Exception as e:
         return False, f"latex2mathml conversion failed: {e}"
 
@@ -127,11 +129,34 @@ def latex_to_omml(latex: str) -> Tuple[bool, str]:
     try:
         import lxml.etree as ET
 
-        xsl_doc = ET.parse(str(xsl_path))
+        # The XSLT file has the root template commented out, so we need to uncomment it
+        xsl_content = xsl_path.read_text()
+        
+        # Uncomment the root template that wraps result in oMath
+        xsl_content = xsl_content.replace('<!--\n  <xsl:template match="/">', '<xsl:template match="/">')
+        xsl_content = xsl_content.replace('</xsl:template>\n-->', '</xsl:template>')
+        
+        # Parse the modified XSLT
+        xsl_doc = ET.fromstring(xsl_content.encode())
         transform = ET.XSLT(xsl_doc)
+        
+        # Parse MathML and transform
         mathml_doc = ET.fromstring(mathml_str.encode())
         omml_doc = transform(mathml_doc)
-        omml = ET.tostring(omml_doc, encoding="unicode")
+        
+        if omml_doc is None:
+            return False, "XSLT transformation returned None"
+            
+        # Get the root element
+        root = omml_doc.getroot()
+        if root is None:
+            return False, "XSLT transformation produced empty result"
+            
+        # Serialize the OMML
+        omml = ET.tostring(root, encoding="unicode")
+        if omml is None:
+            return False, "Failed to serialize OMML result"
+            
         return True, omml.strip()
     except Exception as e:
-        return False, f"XSLT transform failed: {e}" 
+        return False, f"XSLT transform failed: {e}"
