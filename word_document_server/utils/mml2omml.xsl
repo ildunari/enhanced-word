@@ -2614,7 +2614,7 @@
 
   <!-- This template builds a string that is result of concatenating a given string several times. 
 	
-			 Given strToRepeat, create a string that has strToRepeat repeated iRepitions times. 
+			 Given strToRepeat, create a string that has strToRepeat repeated iRepetitions times. 
 	-->
   <xsl:template name="ConcatStringRepeat">
       <xsl:param name="strToRepeat" select="''"/>
