@@ -72,11 +72,16 @@ def check_dependencies() -> Tuple[bool, str]:
                 [sys.executable, "-m", "pip", "install", "latex2mathml>=3.0.0", "--quiet"],
                 check=True,
             )
-        except Exception:
-            return False, (
-                "Python package 'latex2mathml' is missing and automatic installation failed. "
-                "Install it manually via `pip install latex2mathml`."
-            )
+        except FileNotFoundError:
+            # pip not available – bootstrap it via ensurepip then retry
+            try:
+                import ensurepip; ensurepip.bootstrap()
+                subprocess.run([sys.executable, "-m", "pip", "install", "latex2mathml>=3.0.0", "--quiet"], check=True)
+            except Exception:
+                return False, (
+                    "Failed to bootstrap pip and install latex2mathml automatically. "
+                    "Please run `pip install latex2mathml` in the server's Python environment."
+                )
         # Recheck
         if not _has_module("latex2mathml.converter"):
             return False, (
