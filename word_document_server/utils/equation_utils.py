@@ -27,15 +27,9 @@ def _ensure_xsl_cached() -> Path | None:
     xsl_path = cache_dir / "mml2omml.xsl"
     if xsl_path.exists():
         return xsl_path
-    # Attempt download; ignore failures (caller will handle)
-    try:
-        import urllib.request
 
-        with urllib.request.urlopen(MML2OMML_XSL_URL, timeout=10) as resp:
-            xsl_path.write_bytes(resp.read())
-        return xsl_path
-    except Exception:
-        return None
+    # No network download in uvx environment
+    return None
 
 
 def check_dependencies() -> Tuple[bool, str]:
@@ -45,7 +39,10 @@ def check_dependencies() -> Tuple[bool, str]:
             return False, f"Required executable '{exe}' not found in PATH"
     xsl_path = _ensure_xsl_cached()
     if xsl_path is None or not xsl_path.exists():
-        return False, "Could not download mml2omml.xsl converter stylesheet"
+        return False, (
+            "mml2omml.xsl stylesheet not found. Provide it next to equation_utils.py "
+            "or ensure internet access to download automatically."
+        )
     return True, ""
 
 
