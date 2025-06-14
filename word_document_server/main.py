@@ -14,7 +14,8 @@ from word_document_server.tools import (
     extended_document_tools,
     review_tools,
     section_tools,
-    session_tools
+    session_tools,
+    undo_tools
 )
 
 
@@ -111,6 +112,10 @@ def register_tools():
     
     # Legacy basic search (now replaced by enhanced_search_and_replace and get_text with search scope)
     # mcp.tool()(content_tools.search_and_replace)
+
+    # ========== UNDO / REDO (1) ==========
+    # Provides history management while keeping total tool count <= 25
+    mcp.tool()(undo_tools.session_undo)
 
 
 
