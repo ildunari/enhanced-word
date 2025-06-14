@@ -4,3 +4,4 @@ msoffcrypto-tool
 docx2pdf
 lxml>=4.6.0
 packaging>=21.0
+latex2mathml>=3.0.0

@@ -12,8 +12,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import urllib.request
+import contextlib
 from pathlib import Path
 from typing import Tuple
+
+import importlib
 
 MML2OMML_XSL_URL = (
     "https://raw.githubusercontent.com/plgonzalezrx/mathml2omml/master/mml2omml.xsl"
@@ -38,20 +42,40 @@ def _ensure_xsl_cached() -> Path | None:
     if xsl_path.exists():
         return xsl_path
 
-    return None
+    # Attempt download if internet access is available
+    try:
+        with contextlib.closing(
+            urllib.request.urlopen(MML2OMML_XSL_URL, timeout=10)
+        ) as response:
+            data = response.read()
+            # Write the downloaded stylesheet to cache for future runs
+            xsl_path.write_bytes(data)
+            return xsl_path
+    except Exception:
+        # Silent failure – caller will report missing dependency
+        return None
+
+
+def _has_module(module_name: str) -> bool:
+    """Return True if *module_name* can be imported."""
+    spec = importlib.util.find_spec(module_name)
+    return spec is not None
 
 
 def check_dependencies() -> Tuple[bool, str]:
-    """Return (ok, msg) after verifying *pandoc* and *xsltproc* are in PATH."""
-    for exe in ("pandoc", "xsltproc"):
-        if shutil.which(exe) is None:
-            return False, f"Required executable '{exe}' not found in PATH"
+    """Return (ok, msg) after verifying required Python modules and XSL file."""
+    if not _has_module("latex2mathml.converter"):
+        return False, (
+            "Python package 'latex2mathml' is missing. Install it via `pip install latex2mathml`."
+        )
+
     xsl_path = _ensure_xsl_cached()
     if xsl_path is None or not xsl_path.exists():
         return False, (
             "mml2omml.xsl stylesheet not found. Provide it next to equation_utils.py "
             "or ensure internet access to download automatically."
         )
+
     return True, ""
 
 
@@ -67,41 +91,28 @@ def latex_to_omml(latex: str) -> Tuple[bool, str]:
     xsl_path = _ensure_xsl_cached()
     assert xsl_path is not None and xsl_path.exists()
 
-    with tempfile.TemporaryDirectory() as td:
-        tmp_dir = Path(td)
-        tex_input = tmp_dir / "in.tex"
-        mathml_path = tmp_dir / "out_mathml.xml"
+    # Pure-python conversion pipeline
+    try:
+        from latex2mathml.converter import convert as latex2mathml_convert
+    except ImportError:
+        return False, (
+            "Python package 'latex2mathml' is missing. Install it via `pip install latex2mathml`."
+        )
 
-        tex_input.write_text(f"${latex}$", encoding="utf-8")
+    try:
+        mathml_str = latex2mathml_convert(latex)
+    except Exception as e:
+        return False, f"latex2mathml conversion failed: {e}"
 
-        # Call pandoc to get MathML
-        try:
-            subprocess.run(
-                [
-                    "pandoc",
-                    "--from",
-                    "latex",
-                    "--to",
-                    "mathml",
-                    str(tex_input),
-                    "-o",
-                    str(mathml_path),
-                ],
-                check=True,
-                capture_output=True,
-            )
-        except subprocess.CalledProcessError as e:
-            return False, f"pandoc conversion failed: {e.stderr.decode(errors='ignore')[:200]}"
+    # Apply XSLT using lxml
+    try:
+        import lxml.etree as ET
 
-        # Call xsltproc to convert MathML → OMML
-        try:
-            result = subprocess.run(
-                ["xsltproc", str(xsl_path), str(mathml_path)],
-                check=True,
-                capture_output=True,
-            )
-        except subprocess.CalledProcessError as e:
-            return False, f"xsltproc failed: {e.stderr.decode(errors='ignore')[:200]}"
-
-        omml = result.stdout.decode()
-        return True, omml.strip() 
+        xsl_doc = ET.parse(str(xsl_path))
+        transform = ET.XSLT(xsl_doc)
+        mathml_doc = ET.fromstring(mathml_str.encode())
+        omml_doc = transform(mathml_doc)
+        omml = ET.tostring(omml_doc, encoding="unicode")
+        return True, omml.strip()
+    except Exception as e:
+        return False, f"XSLT transform failed: {e}" 
