@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Optional
 
 from docx import Document
-from docx.oxml import OxmlElement
+from docx.oxml import OxmlElement, parse_xml
 
 from word_document_server.utils.session_utils import resolve_document_path
 from word_document_server.utils.equation_utils import latex_to_omml
@@ -94,7 +94,7 @@ async def insert_equation(
         run = p.add_run()
 
         # Inject OMML fragment
-        omml_elem = OxmlElement.from_xml(omml_xml)
+        omml_elem = parse_xml(omml_xml)
         run._r.append(omml_elem)
 
         # Move paragraph to correct location if we created a new one
