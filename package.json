@@ -1,6 +1,6 @@
 {
   "name": "enhanced-word-mcp-server",
-  "version": "2.7.3",
+  "version": "2.7.4",
   "description": "Enhanced Word MCP server with comprehensive document operations. Features 24 consolidated tools, regex positioning fixes, and complete Word document manipulation capabilities.",
   "main": "index.js",
   "bin": {
