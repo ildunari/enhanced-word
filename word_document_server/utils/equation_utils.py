@@ -21,14 +21,23 @@ MML2OMML_XSL_URL = (
 
 
 def _ensure_xsl_cached() -> Path | None:
-    """Download *mml2omml.xsl* into a cache dir the first time it is needed."""
+    """Locate ``mml2omml.xsl``.
+
+    Search order:
+      1. File bundled next to this module (preferred, works offline)
+      2. Previously cached copy in temp dir
+    """
+    module_dir = Path(__file__).parent
+    local_path = module_dir / "mml2omml.xsl"
+    if local_path.exists():
+        return local_path
+
     cache_dir = Path(tempfile.gettempdir()) / "enhanced_word_omml_cache"
     cache_dir.mkdir(exist_ok=True)
     xsl_path = cache_dir / "mml2omml.xsl"
     if xsl_path.exists():
         return xsl_path
 
-    # No network download in uvx environment
     return None
 
 
