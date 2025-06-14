@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Tuple
 
 import importlib
+import sys
 
 MML2OMML_XSL_URL = (
     "https://raw.githubusercontent.com/plgonzalezrx/mathml2omml/master/mml2omml.xsl"
@@ -65,9 +66,22 @@ def _has_module(module_name: str) -> bool:
 def check_dependencies() -> Tuple[bool, str]:
     """Return (ok, msg) after verifying required Python modules and XSL file."""
     if not _has_module("latex2mathml.converter"):
-        return False, (
-            "Python package 'latex2mathml' is missing. Install it via `pip install latex2mathml`."
-        )
+        # Attempt silent install
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "latex2mathml>=3.0.0", "--quiet"],
+                check=True,
+            )
+        except Exception:
+            return False, (
+                "Python package 'latex2mathml' is missing and automatic installation failed. "
+                "Install it manually via `pip install latex2mathml`."
+            )
+        # Recheck
+        if not _has_module("latex2mathml.converter"):
+            return False, (
+                "Python package 'latex2mathml' could not be imported even after attempted installation."
+            )
 
     xsl_path = _ensure_xsl_cached()
     if xsl_path is None or not xsl_path.exists():
