@@ -7,7 +7,8 @@ name = "kosta-enhanced-word-mcp-server"
 version = "2.0.0"
 description = "Enhanced Word MCP server for academic research collaboration with advanced search/replace, review tools, and section management"
 readme = "README.md"
-license = {file = "LICENSE"}
+# Keep license metadata without requiring a file in the repo
+license = { text = "MIT" }
 authors = [
     {name = "Kosta Vučković", email = "kosta@brown.edu"},
     {name = "GongRzhe", email = "gongrzhe@gmail.com"}

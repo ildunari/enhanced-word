@@ -9,6 +9,7 @@ from docx import Document
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, create_document_copy
 from word_document_server.utils.document_utils import get_document_properties, extract_document_text, get_document_structure
 from word_document_server.utils.extended_document_utils import get_paragraph_text, find_text
+from word_document_server.utils.citation_utils import format_run_with_citation_awareness
 from word_document_server.core.styles import ensure_heading_style, ensure_table_style
 
 
@@ -357,8 +358,11 @@ async def get_text(
                     }
                     
                     for run in paragraph.runs:
-                        if run.text.strip():  # Only include runs with actual text
-                            para_info["runs"].append(extract_run_formatting(run, formatting_detail))
+                        # Use citation-aware formatting to capture field content
+                        formatted_run = format_run_with_citation_awareness(run, formatting_detail)
+                        # Include runs with text or field content
+                        if run.text.strip() or formatted_run.get('fields'):
+                            para_info["runs"].append(formatted_run)
                     
                     result["paragraphs"].append(para_info)
                     result["document_text"] += paragraph.text + "\n"
@@ -366,7 +370,7 @@ async def get_text(
                 return json.dumps(result, indent=2)
         
         elif scope == "paragraph":
-            # Original get_paragraph_text_from_document functionality with enhanced formatting
+            # Enhanced: citation-aware formatting to align with 'all'/'range'
             doc = Document(filename)
             
             # Validate paragraph index
@@ -388,8 +392,10 @@ async def get_text(
                 }
                 
                 for run in paragraph.runs:
-                    if run.text.strip():  # Only include runs with actual text
-                        result["runs"].append(extract_run_formatting(run, formatting_detail))
+                    # Use citation-aware formatting and include runs with text or fields
+                    formatted_run = format_run_with_citation_awareness(run, formatting_detail)
+                    if run.text.strip() or formatted_run.get('fields'):
+                        result["runs"].append(formatted_run)
                 
                 return json.dumps(result, indent=2)
         
@@ -522,8 +528,11 @@ async def get_text(
                     }
                     
                     for run in paragraph.runs:
-                        if run.text.strip():  # Only include runs with actual text
-                            para_info["runs"].append(extract_run_formatting(run, formatting_detail))
+                        # Use citation-aware formatting to capture field content
+                        formatted_run = format_run_with_citation_awareness(run, formatting_detail)
+                        # Include runs with text or field content
+                        if run.text.strip() or formatted_run.get('fields'):
+                            para_info["runs"].append(formatted_run)
                     
                     result["paragraphs"].append(para_info)
                 
@@ -631,30 +640,33 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
             if add_page_breaks and i > 0:
                 target_doc.add_page_break()
             
-            # Copy all paragraphs
+            # Copy all paragraphs with run-level formatting
             for paragraph in source_doc.paragraphs:
-                # Create a new paragraph with the same text and style
-                new_paragraph = target_doc.add_paragraph(paragraph.text)
-                new_paragraph.style = target_doc.styles['Normal']  # Default style
-                
+                new_paragraph = target_doc.add_paragraph()
                 # Try to match the style if possible
                 try:
                     if paragraph.style and paragraph.style.name in target_doc.styles:
                         new_paragraph.style = target_doc.styles[paragraph.style.name]
-                except:
+                    else:
+                        new_paragraph.style = target_doc.styles['Normal']
+                except Exception:
                     pass
-                
-                # Copy run formatting
-                for i, run in enumerate(paragraph.runs):
-                    if i < len(new_paragraph.runs):
-                        new_run = new_paragraph.runs[i]
-                        # Copy basic formatting
-                        new_run.bold = run.bold
-                        new_run.italic = run.italic
-                        new_run.underline = run.underline
-                        # Font size if specified
+
+                for run in paragraph.runs:
+                    new_run = new_paragraph.add_run(run.text)
+                    # Copy core formatting
+                    new_run.bold = run.bold
+                    new_run.italic = run.italic
+                    new_run.underline = run.underline
+                    try:
                         if run.font.size:
                             new_run.font.size = run.font.size
+                        if run.font.name:
+                            new_run.font.name = run.font.name
+                        if run.font.color and run.font.color.rgb:
+                            new_run.font.color.rgb = run.font.color.rgb
+                    except Exception:
+                        pass
             
             # Copy all tables
             for table in source_doc.tables:

@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import RGBColor
-from xml.etree import ElementTree as ET
+from lxml import etree as ET
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.utils.session_utils import resolve_document_path
@@ -527,17 +527,12 @@ async def manage_track_changes(
                 if author_filter and del_elem.get(qn('w:author')) != author_filter:
                     continue
                     
-                # Convert delText back to regular text
+                # Convert delText back to regular text using lxml elements
                 for del_text in del_elem.findall('.//w:delText', ns):
-                    # Create new text element
                     text_elem = ET.Element(qn('w:t'))
                     text_elem.text = del_text.text
-                    
-                    # Create new run
                     run_elem = ET.Element(qn('w:r'))
                     run_elem.append(text_elem)
-                    
-                    # Insert before deletion
                     parent = del_elem.getparent()
                     parent.insert(list(parent).index(del_elem), run_elem)
                 
@@ -566,4 +561,3 @@ async def manage_track_changes(
     
     except Exception as e:
         return f"Failed to {action.replace('_', ' ')}: {str(e)}"
-

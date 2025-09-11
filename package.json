@@ -52,7 +52,6 @@
   "files": [
     "word_document_server/",
     "requirements.txt",
-    "README_ENHANCED.md",
     "claude_desktop_config.json",
     "bin/",
     "index.js"

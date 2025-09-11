@@ -2,7 +2,7 @@
 
 [![smithery badge](https://smithery.ai/badge/@GongRzhe/Office-Word-MCP-Server)](https://smithery.ai/server/@GongRzhe/Office-Word-MCP-Server)
 
-A powerful, consolidated Model Context Protocol (MCP) server for creating, reading, and manipulating Microsoft Word documents. This enhanced version provides 22 optimized tools (reduced from 47) for comprehensive Word document operations through a standardized interface.
+A powerful, consolidated Model Context Protocol (MCP) server for creating, reading, and manipulating Microsoft Word documents. This enhanced version provides 38 optimized tools for comprehensive Word document operations through a standardized interface.
 
 <a href="https://glama.ai/mcp/servers/@GongRzhe/Office-Word-MCP-Server">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@GongRzhe/Office-Word-MCP-Server/badge" alt="Office Word Server MCP server" />
@@ -12,9 +12,9 @@ A powerful, consolidated Model Context Protocol (MCP) server for creating, readi
 
 ## Overview
 
-Enhanced-Word-MCP-Server implements the [Model Context Protocol](https://modelcontextprotocol.io/) with a focus on consolidation and efficiency. It provides 22 powerful tools that replace 47 individual functions, offering:
+Enhanced-Word-MCP-Server implements the [Model Context Protocol](https://modelcontextprotocol.io/) with a focus on comprehensive document operations. It provides 38 powerful tools, including:
 
-- **53% tool reduction** while preserving all functionality
+- **Session management** for multi-document workflows
 - **Consolidated operations** for better usability  
 - **Enhanced functionality** with regex support and advanced formatting
 - **Academic and professional workflow optimization**
@@ -325,7 +325,7 @@ MIT License - see LICENSE file for details.
 ## Version History
 
 ### v2.0.0 (Enhanced)
-- 🎯 **53% tool reduction** (47 → 22 tools)
+- 🎯 **38 powerful tools** for comprehensive document operations
 - 🚀 **Enhanced search & replace** with regex support
 - 📝 **Consolidated operations** for better usability
 - 🔧 **Improved error handling** and validation

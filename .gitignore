@@ -9,3 +9,27 @@ wheels/
 # Virtual environments
 .venv
 .DS_Store
+
+# Test files
+test_*.py
+test_*.docx
+*_test.py
+*_test.docx
+verify_*.py
+test_artifacts/
+
+# Temporary Word documents
+~$*.docx
+*.tmp
+*.pdf
+*.protection
+*.signature
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Serena cache
+.serena/

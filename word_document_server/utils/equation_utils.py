@@ -152,6 +152,9 @@ def latex_to_omml(latex: str) -> Tuple[bool, str]:
         if root is None:
             return False, "XSLT transformation produced empty result"
             
+        # Fix n-ary operators with empty <e> elements
+        _fix_nary_operators(root)
+            
         # Serialize the OMML
         omml = ET.tostring(root, encoding="unicode")
         if omml is None:
@@ -160,3 +163,55 @@ def latex_to_omml(latex: str) -> Tuple[bool, str]:
         return True, omml.strip()
     except Exception as e:
         return False, f"XSLT transform failed: {e}"
+
+# Add this to equation_utils.py
+
+def _fix_nary_operators(root):
+    """Fix n-ary operators (integrals, sums, etc.) with empty <e> elements.
+    
+    The default XSLT conversion leaves <e> empty and puts the content after
+    the nary element. This function moves that content into the <e> element.
+    """
+    import lxml.etree as ET
+    
+    # Define namespaces
+    namespaces = {
+        'm': 'http://schemas.openxmlformats.org/officeDocument/2006/math',
+        'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    }
+    
+    # Find all nary elements
+    nary_elements = root.xpath('.//m:nary', namespaces=namespaces)
+    
+    for nary in nary_elements:
+        # Find the <e> element within this nary
+        e_elem = nary.find('m:e', namespaces)
+        if e_elem is None:
+            continue
+            
+        # Check if <e> is empty or only has whitespace
+        if len(e_elem) > 0 or (e_elem.text and e_elem.text.strip()):
+            continue
+            
+        # Collect elements that should be inside <e>
+        # These are siblings after the nary element until we hit another nary or the end
+        parent = nary.getparent()
+        nary_index = list(parent).index(nary)
+        elements_to_move = []
+        
+        # Collect following siblings that should be part of the integrand/summand
+        for i in range(nary_index + 1, len(parent)):
+            next_elem = parent[i]
+            # Stop if we hit another nary operator
+            if next_elem.tag.endswith('nary'):
+                break
+            # Also stop at certain elements that indicate end of the expression
+            tag_local = next_elem.tag.split('}')[-1] if '}' in next_elem.tag else next_elem.tag
+            if tag_local in ['oMath', 'oMathPara']:
+                break
+            elements_to_move.append(next_elem)
+            
+        # Move collected elements into <e>
+        for elem in elements_to_move:
+            parent.remove(elem)
+            e_elem.append(elem)

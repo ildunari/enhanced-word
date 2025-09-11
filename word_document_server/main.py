@@ -17,6 +17,7 @@ from word_document_server.tools import (
     session_tools,
     undo_tools,
     equation_tools,
+    citation_tools,
 )
 
 
@@ -81,6 +82,10 @@ def register_tools():
     mcp.tool()(protection_tools.add_digital_signature)
     mcp.tool()(protection_tools.verify_document)
 
+    # ========== CITATION MANAGEMENT (4) ==========
+    # EndNote and field-based citation support
+    # Consolidated to keep total tools ≤ 25
+    mcp.tool()(citation_tools.citations)
     
     # ========== LEGACY COMPATIBILITY (OPTIONAL) ==========
     # These maintain backwards compatibility - can be removed after transition

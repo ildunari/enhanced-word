@@ -10,10 +10,13 @@ from typing import List, Optional
 from docx import Document
 from docx.shared import Inches, Pt
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, validate_docx_path
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, validate_docx_path, sanitize_file_path
 from word_document_server.utils.document_utils import find_and_replace_text
 from word_document_server.utils.session_utils import resolve_document_path
 from word_document_server.core.styles import ensure_heading_style, ensure_table_style
+from word_document_server.utils.equation_utils import latex_to_omml
+from word_document_server.utils.citation_utils import extract_fields_from_run, format_run_with_citation_awareness
+from docx.oxml import parse_xml
 
 
 async def add_text_content(
@@ -427,10 +430,22 @@ async def add_picture(document_id: str = None, filename: str = None, image_path:
     # Validate document existence
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
-    
+
+    # Sanitize and validate image path
+    if not image_path:
+        return "Image file path is required"
+    ok_img, safe_img_path, img_err = sanitize_file_path(
+        image_path,
+        allowed_extensions=[
+            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff'
+        ]
+    )
+    if not ok_img:
+        return f"Invalid image path: {img_err}"
+
     # Get absolute paths for better diagnostics
     abs_filename = os.path.abspath(filename)
-    abs_image_path = os.path.abspath(image_path)
+    abs_image_path = os.path.abspath(safe_img_path)
     
     # Validate image existence with improved error message
     if not os.path.exists(abs_image_path):
@@ -490,7 +505,10 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                                     paragraph_indices: Optional[List[int]] = None,
                                     occurrence_index: Optional[int] = None,
                                     char_start: Optional[int] = None,
-                                    char_end: Optional[int] = None) -> str:
+                                    char_end: Optional[int] = None,
+                                    replace_with_equation: bool = False,
+                                    latex_equation: Optional[str] = None,
+                                    preserve_fields: bool = True) -> str:
     """Enhanced search and replace with formatting options, regex support, and case-insensitive matching.
     
     Provides powerful text replacement capabilities with:
@@ -521,6 +539,9 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         occurrence_index: Target occurrence index for filtering
         char_start: Start character index for range filtering
         char_end: End character index for range filtering
+        replace_with_equation: Replace matched text with a LaTeX equation (default False)
+        latex_equation: LaTeX equation to insert (required if replace_with_equation=True)
+        preserve_fields: Preserve Word fields like EndNote citations when replacing text (default True)
     
     Returns:
         Status message with replacement count and details
@@ -542,6 +563,19 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         enhanced_search_and_replace(document_id="main", find_text="AI", replace_text="Artificial Intelligence", 
                                    whole_words_only=True, apply_formatting=True,
                                    font_name="Arial", font_size=12)
+        
+        # Replace text with equation
+        enhanced_search_and_replace(document_id="main", find_text="E=mc2", 
+                                   replace_with_equation=True, latex_equation="E = mc^2")
+                                   
+        # Insert equation at specific location with formatting
+        enhanced_search_and_replace(document_id="main", find_text="EQUATION_HERE", 
+                                   replace_with_equation=True, latex_equation=r"rac{a^2 + b^2}{c}",
+                                   apply_formatting=True, bold=True)
+        
+        # Replace text while preserving EndNote citations
+        enhanced_search_and_replace(document_id="paper", find_text="old methodology", 
+                                   replace_text="new approach", preserve_fields=True)
     """
     from word_document_server.utils.session_utils import resolve_document_path
     
@@ -558,8 +592,14 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     if not find_text:
         return "Error: find_text parameter is required"
     
-    if replace_text is None:
-        return "Error: replace_text parameter is required"
+    if replace_with_equation:
+        if not latex_equation:
+            return "Error: latex_equation parameter is required when replace_with_equation is True"
+        # Allow replace_text to be None when using replace_with_equation
+        # (for pure equation replacement)
+    else:
+        if replace_text is None:
+            return "Error: replace_text parameter is required when replace_with_equation is False"
     
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
@@ -611,7 +651,9 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
 
         def process_para(p_idx, paragraph_list):
             nonlocal current_occurrence, count
-            if p_idx not in target_paragraphs:
+            # If p_idx is provided, honor paragraph-range gating; for table
+            # paragraphs (p_idx is None), process unconditionally.
+            if p_idx is not None and p_idx not in target_paragraphs:
                 return
             import re
             para_text_combined = "\n".join([p.text for p in paragraph_list])
@@ -639,7 +681,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                 else:
                     local_target = occurrence_index - current_occurrence
 
-            replace_count, match_count = _enhanced_replace_in_paragraphs(
+            replace_count, match_count, had_equations = _enhanced_replace_in_paragraphs(
                 paragraph_list,
                 find_text,
                 replace_text,
@@ -656,29 +698,48 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                 target_occurrence=local_target,
                 char_start=char_start,
                 char_end=char_end,
+                replace_with_equation=replace_with_equation,
+                latex_equation=latex_equation,
+                preserve_fields=preserve_fields,
             )
+            if had_equations:
+                equations_inserted = True
             current_occurrence += match_count
             count += replace_count
     
         count = 0
+        equations_inserted = False
+        
+
+        
         # Process body paragraphs
         for idx, para in enumerate(doc.paragraphs):
             process_para(idx, [para])
 
-        # Search in tables
+        # Search in tables (treat cell paragraphs independently of doc paragraph indices)
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
-                    process_para(idx, cell.paragraphs)
+                    process_para(None, cell.paragraphs)
         
         if count > 0:
+            # If equations were inserted, ensure math namespace is present
+            if equations_inserted:
+                from docx.oxml.ns import qn
+                root = doc._element
+                if "m" not in root.nsmap:
+                    root.set(qn("xmlns:m"), "http://schemas.openxmlformats.org/officeDocument/2006/math")
+            
             doc.save(filename)
             search_type = "regex pattern" if use_regex else "text"
             case_info = "" if match_case else " (case-insensitive)"
             word_info = " (whole words only)" if whole_words_only else ""
             formatting_applied = " with formatting" if apply_formatting else ""
             
-            return f"Replaced {count} occurrence(s) of {search_type} '{find_text}'{case_info}{word_info} with '{replace_text}'{formatting_applied}."
+            if replace_with_equation:
+                return f"Replaced {count} occurrence(s) of {search_type} '{find_text}'{case_info}{word_info} with equation{formatting_applied}."
+            else:
+                return f"Replaced {count} occurrence(s) of {search_type} '{find_text}'{case_info}{word_info} with '{replace_text}'{formatting_applied}."
         else:
             search_type = "regex pattern" if use_regex else "text"
             return f"No occurrences of {search_type} '{find_text}' found."
@@ -695,7 +756,9 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                                    bold, italic, underline, color, font_size, font_name,
                                    match_case, whole_words_only, use_regex=False,
                                    target_occurrence=None,
-                                   char_start=None, char_end=None):
+                                   char_start=None, char_end=None,
+                                   replace_with_equation=False, latex_equation=None,
+                                   preserve_fields=True):
     """Helper function to replace text in paragraphs with optional formatting and regex support.
     
     This implementation fixes the positioning bugs by properly inserting runs at their
@@ -706,6 +769,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
     
     count = 0
     match_total_overall = 0  # total matches found (ignores char-range / occurrence filters)
+    equations_inserted = False  # Track if any equations were inserted
     
     for para in paragraphs:
         para_text = para.text
@@ -770,25 +834,29 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             end_pos = match.end()
             
             # For regex, translate JS back-refs then expand groups
-            if use_regex:
+            if use_regex and not replace_with_equation:
                 converted_repl = _convert_js_backreferences(replace_text)
                 actual_replace_text = match.expand(converted_repl)
-            else:
+            elif not replace_with_equation:
                 actual_replace_text = replace_text
-                # For case-insensitive matching, preserve the original case pattern
-                if not match_case:
-                    matched_text = para_text[start_pos:end_pos]
-                    actual_replace_text = _preserve_case(matched_text, actual_replace_text)
+            else:
+                # For equation replacement, we don't need replace_text
+                actual_replace_text = None
+            
+            # For case-insensitive matching, preserve the original case pattern
+            if not match_case and not replace_with_equation:
+                matched_text = para_text[start_pos:end_pos]
+                actual_replace_text = _preserve_case(matched_text, actual_replace_text)
                 
-                # Handle space collapsing when deleting text
-                if replace_text == "":
-                    # Check if we have spaces before and after the match
-                    has_space_before = start_pos > 0 and para_text[start_pos - 1].isspace()
-                    has_space_after = end_pos < len(para_text) and para_text[end_pos].isspace()
-                    
-                    # If we have spaces on both sides, keep one space
-                    if has_space_before and has_space_after:
-                        actual_replace_text = " "
+            # Handle space collapsing when deleting text
+            if not replace_with_equation and replace_text == "":
+                # Check if we have spaces before and after the match
+                has_space_before = start_pos > 0 and para_text[start_pos - 1].isspace()
+                has_space_after = end_pos < len(para_text) and para_text[end_pos].isspace()
+                
+                # If we have spaces on both sides, keep one space
+                if has_space_before and has_space_after:
+                    actual_replace_text = " "
             
             # NEW APPROACH: Instead of modifying existing runs and appending new ones,
             # we rebuild the runs in the correct order by collecting all run segments
@@ -806,19 +874,25 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                 # Determine how this run overlaps with the match
                 if run_end <= start_pos:
                     # Run is completely before the match - keep as is
-                    if run.text:  # Only add non-empty runs
+                    run_info = format_run_with_citation_awareness(run)
+                    if run.text or run_info.get('fields'):  # Keep runs with text or fields
                         run_segments.append({
                             'text': run.text,
                             'formatting': _extract_run_formatting(run),
-                            'type': 'keep'
+                            'type': 'keep',
+                            'fields': run_info.get('fields'),
+                            'run_element': run._element  # Keep reference to original element
                         })
                 elif run_start >= end_pos:
                     # Run is completely after the match - keep as is
-                    if run.text:  # Only add non-empty runs
+                    run_info = format_run_with_citation_awareness(run)
+                    if run.text or run_info.get('fields'):  # Keep runs with text or fields
                         run_segments.append({
                             'text': run.text,
                             'formatting': _extract_run_formatting(run),
-                            'type': 'keep'
+                            'type': 'keep',
+                            'fields': run_info.get('fields'),
+                            'run_element': run._element  # Keep reference to original element
                         })
                 else:
                     # Run overlaps with the match - need to split it
@@ -826,11 +900,13 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                     # Part before the match
                     if run_start < start_pos:
                         before_text = run.text[:start_pos - run_start]
+                        run_info = format_run_with_citation_awareness(run)
                         if before_text:
                             run_segments.append({
                                 'text': before_text,
                                 'formatting': _extract_run_formatting(run),
-                                'type': 'keep'
+                                'type': 'keep',
+                                'fields': run_info.get('fields') if run_start == 0 else None  # Only preserve fields if at start
                             })
                     
                     # The match replacement (only add once, when we encounter the first overlapping run)
@@ -847,20 +923,68 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                                 'font_name': font_name if font_name else replacement_formatting.get('font_name')
                             })
                         
-                        run_segments.append({
-                            'text': actual_replace_text,
-                            'formatting': replacement_formatting,
-                            'type': 'replacement'
-                        })
+                        if replace_with_equation:
+                            # Convert LaTeX to OMML for equation replacement
+                            success, omml_or_err = latex_to_omml(latex_equation)
+                            if not success:
+                                # If conversion fails, skip this replacement
+                                continue
+                            run_segments.append({
+                                'omml_xml': omml_or_err,
+                                'formatting': replacement_formatting,
+                                'type': 'equation',
+                                'display_mode': 'inline'  # Default to inline for direct replacement
+                            })
+                            equations_inserted = True
+                        else:
+                            # Parse for equation markers in replacement text
+                            content_segments = _parse_equation_markers(actual_replace_text)
+                            
+                            # If only one text segment, add it as before
+                            if len(content_segments) == 1 and content_segments[0]['type'] == 'text':
+                                run_segments.append({
+                                    'text': actual_replace_text,
+                                    'formatting': replacement_formatting,
+                                    'type': 'replacement'
+                                })
+                            else:
+                                # Multiple segments - add each with appropriate type
+                                for content_seg in content_segments:
+                                    if content_seg['type'] == 'text' and content_seg['content']:
+                                        run_segments.append({
+                                            'text': content_seg['content'],
+                                            'formatting': replacement_formatting,
+                                            'type': 'replacement'
+                                        })
+                                    elif content_seg['type'] == 'equation':
+                                        # Convert LaTeX to OMML
+                                        success, omml_or_err = latex_to_omml(content_seg['content'])
+                                        if success:
+                                            run_segments.append({
+                                                'omml_xml': omml_or_err,
+                                                'formatting': replacement_formatting,
+                                                'type': 'equation',
+                                                'display_mode': content_seg.get('display_mode', 'inline')
+                                            })
+                                            equations_inserted = True
+                                        else:
+                                            # If conversion fails, add as text
+                                            run_segments.append({
+                                                'text': f"{{{{equation:{content_seg['content']}}}}}",
+                                                'formatting': replacement_formatting,
+                                                'type': 'replacement'
+                                            })
                     
                     # Part after the match
                     if run_end > end_pos:
                         after_text = run.text[end_pos - run_start:]
+                        run_info = format_run_with_citation_awareness(run)
                         if after_text:
                             run_segments.append({
                                 'text': after_text,
                                 'formatting': _extract_run_formatting(run),
-                                'type': 'keep'
+                                'type': 'keep',
+                                'fields': run_info.get('fields') if end_pos == run_end else None  # Only preserve fields if at end
                             })
                 
                 current_pos += run_length
@@ -874,29 +998,61 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
             # "double-space" artifacts when replacement text is an empty string.
             cleaned_segments = []
             for seg in run_segments:
+                # Keep equation segments regardless of text content
+                if seg.get('type') == 'equation':
+                    cleaned_segments.append(seg)
+                    continue
                 # Skip segments with empty text (already handled by check below)
-                if seg['text'] == "":
+                if seg.get('text', '') == "":
                     continue
                 if cleaned_segments:
                     prev = cleaned_segments[-1]
-                    # If previous ends with space and current starts with space → trim one
-                    if prev['text'].endswith(' ') and seg['text'].startswith(' '):
-                        # Prefer to strip the leading spaces of the current segment to keep formatting of previous run unchanged
-                        seg['text'] = seg['text'].lstrip()
-                        if seg['text'] == "":
-                            # Entire segment became empty → skip it
-                            continue
+                    # Only process spacing for text segments
+                    if 'text' in prev and 'text' in seg:
+                        # If previous ends with space and current starts with space → trim one
+                        if prev['text'].endswith(' ') and seg['text'].startswith(' '):
+                            # Prefer to strip the leading spaces of the current segment to keep formatting of previous run unchanged
+                            seg['text'] = seg['text'].lstrip()
+                            if seg['text'] == "":
+                                # Entire segment became empty → skip it
+                                continue
                     # NEW: If previous ends with space and current begins with punctuation, trim the trailing space.
                     punctuation_chars = '.!,?:;)'  # extend as needed
-                    if prev['text'].endswith(' ') and seg['text'][0] in punctuation_chars:
+                    if 'text' in prev and 'text' in seg and prev['text'].endswith(' ') and seg['text'][0] in punctuation_chars:
                         prev['text'] = prev['text'].rstrip()
                 cleaned_segments.append(seg)
 
             for segment in cleaned_segments:
-                if segment['text']:
+                if segment.get('type') == 'equation':
+                    # Create empty run for equation
+                    # Note: Display mode equations should ideally be in separate paragraphs
+                    # Currently all equations are inserted inline within the paragraph
+                    new_run = para.add_run()
+                    # Parse and append OMML
+                    omml_elem = parse_xml(segment['omml_xml'])
+                    new_run._r.append(omml_elem)
+                    _apply_run_formatting(new_run, segment['formatting'])
+                elif segment.get('fields') and len(segment.get('fields', [])) > 0:
+                    # This segment contains citation fields
+                    # We need to preserve the field structure
+                    new_run = para.add_run()
+                    # Copy field elements from original run
+                    run_element = new_run._element
+                    
+                    # For simple fields, we need to recreate the fldSimple element
+                    for field in segment['fields']:
+                        if 'xml_element' in field:
+                            # Parse the field XML and append to the new run
+                            field_elem = parse_xml(field['xml_element'])
+                            run_element.append(field_elem)
+                    
+                    # Apply formatting to the run
+                    _apply_run_formatting(new_run, segment['formatting'])
+                elif segment.get('text'):
                     new_run = para.add_run(segment['text'])
                     _apply_run_formatting(new_run, segment['formatting'])
     
+    return count, match_total_overall, equations_inserted
     return count, match_total_overall
 
 
@@ -1219,3 +1375,68 @@ def _preserve_case(original_text: str, replacement_text: str) -> str:
                 # Beyond original length, keep replacement as-is
                 result.append(char)
         return ''.join(result)
+
+def _parse_equation_markers(text: str) -> List[dict]:
+    """Parse text containing {{equation:latex}} markers into segments.
+    
+    Supports formats:
+    - {{equation:latex}} - Auto-detect display/inline based on context
+    - {{equation:display:latex}} - Force display mode
+    - {{equation:inline:latex}} - Force inline mode
+    - {{equation1:latex}}, {{equation2:latex}} - Numbered equations
+    
+    Returns a list of segments with either 'text' or 'equation' type.
+    """
+    import re
+    segments = []
+    last_end = 0
+    
+    # Enhanced pattern to capture optional display mode and equation numbers
+    # Matches: {{equation:latex}}, {{equation:display:latex}}, {{equation1:latex}}, etc.
+    pattern = r'\{\{equation(\d*):(?:(display|inline):)?(.*?)\}\}'
+    
+    for match in re.finditer(pattern, text):
+        # Add text before the equation marker
+        if match.start() > last_end:
+            text_before = text[last_end:match.start()]
+            if text_before:
+                segments.append({'type': 'text', 'content': text_before})
+        
+        # Extract equation details
+        eq_number = match.group(1) or ''
+        display_mode = match.group(2)  # 'display', 'inline', or None for auto
+        latex = match.group(3).strip()
+        
+        # Auto-detect display mode if not specified
+        if display_mode is None:
+            # Check context for auto-detection
+            text_before = text[last_end:match.start()].strip()
+            text_after_end = match.end()
+            text_after = text[text_after_end:text_after_end + 50].strip() if text_after_end < len(text) else ''
+            
+            # If equation is alone in the paragraph or at start/end, make it display
+            if (not text_before or text_before.endswith('\n')) and (not text_after or text_after.startswith('\n')):
+                display_mode = 'display'
+            else:
+                display_mode = 'inline'
+        
+        segments.append({
+            'type': 'equation',
+            'content': latex,
+            'display_mode': display_mode,
+            'number': eq_number
+        })
+        
+        last_end = match.end()
+    
+    # Add any remaining text after the last equation
+    if last_end < len(text):
+        remaining_text = text[last_end:]
+        if remaining_text:
+            segments.append({'type': 'text', 'content': remaining_text})
+    
+    # If no equations found, return single text segment
+    if not segments:
+        segments.append({'type': 'text', 'content': text})
+    
+    return segments

@@ -33,20 +33,22 @@ claude mcp list
 
 ```
 word_document_server/
-├── main.py                 # FastMCP server registration (24 tools)
+├── main.py                 # FastMCP server registration (28 tools)
 ├── tools/
 │   ├── document_tools.py   # Core document operations
 │   ├── content_tools.py    # Text content and search/replace
 │   ├── footnote_tools.py   # Footnotes and endnotes
 │   ├── section_tools.py    # Document structure analysis
 │   ├── review_tools.py     # Comments and track changes
-│   └── protection_tools.py # Document security
+│   ├── protection_tools.py # Document security
+│   └── citation_tools.py   # EndNote citation management
 └── utils/
     ├── document_utils.py   # Core Word document utilities
-    └── file_utils.py       # File path handling
+    ├── file_utils.py       # File path handling
+    └── citation_utils.py   # EndNote citation extraction
 ```
 
-## Consolidated Tools (24 total)
+## Consolidated Tools (28 total)
 
 **6 Consolidated Tools:**
 - `get_text` (replaces 3 tools)
@@ -60,6 +62,12 @@ word_document_server/
 - Document management (create, copy, info, merge)
 - Advanced features (search/replace, tables, images, PDF)
 - Formatting and analysis tools
+
+**4 Citation Tools (NEW):**
+- `list_citations` - Extract all EndNote citations with metadata
+- `get_citation_at_position` - Get citation details at specific location
+- `copy_existing_citation` - Copy citation for reuse
+- `analyze_citation_distribution` - Statistical analysis of citations
 
 ## Testing Approach
 
@@ -81,7 +89,9 @@ claude mcp get word-mcp
 
 ## Version History
 
-- **v2.2.1**: Current version with 24 consolidated tools
+- **v2.8.0**: Current version with 42 tools and EndNote citation support
+- **v2.7.12**: Previous version with 38 tools and equation support
+- **v2.2.1**: Consolidated tools version
 - **v2.1.1**: Pre-consolidation (47 tools)
 
 ## Code Style

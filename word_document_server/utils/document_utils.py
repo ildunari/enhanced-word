@@ -25,7 +25,9 @@ def get_document_properties(doc_path: str) -> Dict[str, Any]:
             "modified": str(core_props.modified) if core_props.modified else "",
             "last_modified_by": core_props.last_modified_by or "",
             "revision": core_props.revision or 0,
-            "page_count": len(doc.sections),
+            # 'page_count' is not available from python-docx; keep key with null for compatibility
+            "page_count": None,
+            "section_count": len(doc.sections),
             "word_count": sum(len(paragraph.text.split()) for paragraph in doc.paragraphs),
             "paragraph_count": len(doc.paragraphs),
             "table_count": len(doc.tables)
