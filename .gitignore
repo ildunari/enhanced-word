@@ -15,11 +15,8 @@ wheels/
 test_artifacts/
 .pytest_cache/
 
-!tests/
-!tests/**
 !tests/fixtures/
 !tests/fixtures/**
-!test_enhanced_features.py
 
 # Temporary Word documents
 ~$*.docx
