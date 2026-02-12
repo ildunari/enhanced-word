@@ -631,6 +631,15 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
             re.compile(find_text, flags)
         except re.error as e:
             return f"Invalid regex pattern '{find_text}': {str(e)}"
+
+    # Pre-validate LaTeX conversion once to avoid partial/slow failures during replacement.
+    # If conversion fails, we bail out before mutating any document content.
+    precomputed_equation_omml_xml = None
+    if replace_with_equation:
+        ok, omml_or_err = latex_to_omml(latex_equation)
+        if not ok:
+            return f"Error: latex_equation conversion failed: {omml_or_err}"
+        precomputed_equation_omml_xml = omml_or_err
     
     try:
         doc = Document(filename)
@@ -650,7 +659,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         current_occurrence = 0
 
         def process_para(p_idx, paragraph_list):
-            nonlocal current_occurrence, count
+            nonlocal current_occurrence, count, equations_inserted
             # If p_idx is provided, honor paragraph-range gating; for table
             # paragraphs (p_idx is None), process unconditionally.
             if p_idx is not None and p_idx not in target_paragraphs:
@@ -701,6 +710,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                 replace_with_equation=replace_with_equation,
                 latex_equation=latex_equation,
                 preserve_fields=preserve_fields,
+                equation_omml_xml=precomputed_equation_omml_xml,
             )
             if had_equations:
                 equations_inserted = True
@@ -758,7 +768,8 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                                    target_occurrence=None,
                                    char_start=None, char_end=None,
                                    replace_with_equation=False, latex_equation=None,
-                                   preserve_fields=True):
+                                   preserve_fields=True,
+                                   equation_omml_xml=None):
     """Helper function to replace text in paragraphs with optional formatting and regex support.
     
     This implementation fixes the positioning bugs by properly inserting runs at their
@@ -832,6 +843,7 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
         for match in reversed(matches_to_apply):
             start_pos = match.start()
             end_pos = match.end()
+            matched_text_for_fallback = para_text[start_pos:end_pos]
             
             # For regex, translate JS back-refs then expand groups
             if use_regex and not replace_with_equation:
@@ -924,18 +936,22 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                             })
                         
                         if replace_with_equation:
-                            # Convert LaTeX to OMML for equation replacement
-                            success, omml_or_err = latex_to_omml(latex_equation)
-                            if not success:
-                                # If conversion fails, skip this replacement
-                                continue
-                            run_segments.append({
-                                'omml_xml': omml_or_err,
-                                'formatting': replacement_formatting,
-                                'type': 'equation',
-                                'display_mode': 'inline'  # Default to inline for direct replacement
-                            })
-                            equations_inserted = True
+                            # Equation OMML should have been prevalidated upstream.
+                            if not equation_omml_xml:
+                                # Fall back to reinserting original matched text (no-op semantics).
+                                run_segments.append({
+                                    'text': matched_text_for_fallback,
+                                    'formatting': replacement_formatting,
+                                    'type': 'replacement'
+                                })
+                            else:
+                                run_segments.append({
+                                    'omml_xml': equation_omml_xml,
+                                    'formatting': replacement_formatting,
+                                    'type': 'equation',
+                                    'display_mode': 'inline'  # Default to inline for direct replacement
+                                })
+                                equations_inserted = True
                         else:
                             # Parse for equation markers in replacement text
                             content_segments = _parse_equation_markers(actual_replace_text)
