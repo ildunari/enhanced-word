@@ -16,6 +16,20 @@ import os
 from pathlib import Path
 from threading import Lock
 from typing import Dict, List, Optional
+from word_document_server.utils.limits import (
+    UNDO_BUDGET_EXCEEDED,
+    get_max_undo_bytes_total,
+)
+
+
+class _Snapshot:
+    """Single history snapshot with creation order for deterministic eviction."""
+
+    __slots__ = ("seq", "data")
+
+    def __init__(self, seq: int, data: bytes) -> None:
+        self.seq = seq
+        self.data = data
 
 
 class _HistoryStacks:
@@ -24,8 +38,8 @@ class _HistoryStacks:
     __slots__ = ("undo", "redo")
 
     def __init__(self) -> None:
-        self.undo: List[bytes] = []
-        self.redo: List[bytes] = []
+        self.undo: List[_Snapshot] = []
+        self.redo: List[_Snapshot] = []
 
 
 class UndoManager:
@@ -36,6 +50,8 @@ class UndoManager:
         self._stacks: Dict[str, _HistoryStacks] = {}
         self._max_depth = max_depth
         self._lock = Lock()
+        self._next_seq = 0
+        self._budget_evictions = 0
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -45,6 +61,49 @@ class UndoManager:
         if path not in self._stacks:
             self._stacks[path] = _HistoryStacks()
         return self._stacks[path]
+
+    def _new_snapshot(self, data: bytes) -> _Snapshot:
+        snapshot = _Snapshot(self._next_seq, data)
+        self._next_seq += 1
+        return snapshot
+
+    def _total_snapshot_bytes(self) -> int:
+        total = 0
+        for stacks in self._stacks.values():
+            total += sum(len(s.data) for s in stacks.undo)
+            total += sum(len(s.data) for s in stacks.redo)
+        return total
+
+    def _enforce_total_budget(self) -> None:
+        limit = get_max_undo_bytes_total()
+        while self._total_snapshot_bytes() > limit:
+            oldest_path = None
+            oldest_stack = None
+            oldest_seq = None
+
+            for path, stacks in self._stacks.items():
+                if stacks.undo:
+                    seq = stacks.undo[0].seq
+                    if oldest_seq is None or seq < oldest_seq:
+                        oldest_path = path
+                        oldest_stack = "undo"
+                        oldest_seq = seq
+                if stacks.redo:
+                    seq = stacks.redo[0].seq
+                    if oldest_seq is None or seq < oldest_seq:
+                        oldest_path = path
+                        oldest_stack = "redo"
+                        oldest_seq = seq
+
+            if oldest_path is None or oldest_stack is None:
+                break
+
+            stacks = self._stacks[oldest_path]
+            if oldest_stack == "undo":
+                stacks.undo.pop(0)
+            else:
+                stacks.redo.pop(0)
+            self._budget_evictions += 1
 
     # ------------------------------------------------------------------
     # Public history operations (used by tools & tests)
@@ -70,10 +129,11 @@ class UndoManager:
             except Exception:
                 return  # Skip snapshot on read error
 
-            stacks.undo.append(data)
+            stacks.undo.append(self._new_snapshot(data))
             if len(stacks.undo) > self._max_depth:
                 stacks.undo.pop(0)
             stacks.redo.clear()
+            self._enforce_total_budget()
 
     def undo(self, path: str, steps: int = 1) -> str:
         """Restore *steps* previous states for *path*.
@@ -96,18 +156,19 @@ class UndoManager:
                 try:
                     with open(normalized, "rb") as f:
                         current_bytes = f.read()
-                    stacks.redo.append(current_bytes)
+                    stacks.redo.append(self._new_snapshot(current_bytes))
                 except Exception:
                     pass
 
                 try:
                     with open(normalized, "wb") as f:
-                        f.write(previous)
+                        f.write(previous.data)
                 except Exception as e:
                     stacks.undo.append(previous)
                     return f"Failed to restore snapshot: {e}"
 
                 processed += 1
+                self._enforce_total_budget()
 
             return f"Undo successful (requested {requested}, restored {processed}) for {normalized}"
 
@@ -128,7 +189,7 @@ class UndoManager:
                 try:
                     with open(normalized, "rb") as f:
                         current_bytes = f.read()
-                    stacks.undo.append(current_bytes)
+                    stacks.undo.append(self._new_snapshot(current_bytes))
                     if len(stacks.undo) > self._max_depth:
                         stacks.undo.pop(0)
                 except Exception:
@@ -136,12 +197,13 @@ class UndoManager:
 
                 try:
                     with open(normalized, "wb") as f:
-                        f.write(next_state)
+                        f.write(next_state.data)
                 except Exception as e:
                     stacks.redo.append(next_state)
                     return f"Failed to re-apply snapshot: {e}"
 
                 processed += 1
+                self._enforce_total_budget()
 
             return f"Redo successful (requested {requested}, applied {processed}) for {normalized}"
 
@@ -151,7 +213,12 @@ class UndoManager:
             stacks = self._stacks.get(normalized)
             undo_len = len(stacks.undo) if stacks else 0
             redo_len = len(stacks.redo) if stacks else 0
-        return f"History for {normalized}: undo={undo_len}, redo={redo_len}"
+            total_bytes = self._total_snapshot_bytes()
+            evictions = self._budget_evictions
+        suffix = f", total_snapshot_bytes={total_bytes}, budget_evictions={evictions}"
+        if evictions > 0:
+            suffix += f" [{UNDO_BUDGET_EXCEEDED}]"
+        return f"History for {normalized}: undo={undo_len}, redo={redo_len}{suffix}"
 
     def clear_history(self, path: Optional[str] = None) -> str:
         with self._lock:

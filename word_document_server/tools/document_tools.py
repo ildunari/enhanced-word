@@ -16,15 +16,10 @@ from word_document_server.utils.document_utils import get_document_properties, e
 from word_document_server.utils.extended_document_utils import get_paragraph_text, find_text
 from word_document_server.utils.citation_utils import format_run_with_citation_awareness
 from word_document_server.core.styles import ensure_heading_style, ensure_table_style
-
-
-def _env_int(name: str, default: int, minimum: int = 1) -> int:
-    raw = os.getenv(name, str(default))
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value >= minimum else minimum
+from word_document_server.utils.limits import (
+    check_doc_size_for_operation,
+    get_max_search_output_chars,
+)
 
 
 def _json_dumps_with_char_limit(payload: Dict[str, Any], max_chars: int) -> str:
@@ -298,7 +293,12 @@ async def get_text(
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
 
-    max_output_chars = _env_int("EW_MAX_SEARCH_OUTPUT_CHARS", 200_000, minimum=256)
+    max_output_chars = get_max_search_output_chars()
+
+    if scope == "search":
+        size_ok, size_error = check_doc_size_for_operation(filename, "get_text(search)")
+        if not size_ok:
+            return size_error
     
     def extract_run_formatting(run, detail_level="basic"):
         """Extract formatting information from a run."""
@@ -670,6 +670,11 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
     from word_document_server.core.tables import copy_table
     
     target_filename = ensure_docx_extension(target_filename)
+
+    if os.path.exists(target_filename):
+        target_size_ok, target_size_error = check_doc_size_for_operation(target_filename, "merge_documents(target)")
+        if not target_size_ok:
+            return target_size_error
     
     # Check if target file is writeable
     is_writeable, error_message = check_file_writeable(target_filename)
@@ -682,6 +687,11 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
         doc_filename = ensure_docx_extension(filename)
         if not os.path.exists(doc_filename):
             missing_files.append(doc_filename)
+            continue
+
+        size_ok, size_error = check_doc_size_for_operation(doc_filename, f"merge_documents(source:{doc_filename})")
+        if not size_ok:
+            return size_error
     
     if missing_files:
         return f"Cannot merge documents. The following source files do not exist: {', '.join(missing_files)}"

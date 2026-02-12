@@ -44,6 +44,10 @@ def resolve_document_path(document_id: Optional[str] = None, filename: Optional[
         validation_error = session_manager.validate_document_id(document_id)
         if validation_error:
             return "", f"Error: Both document_id and filename provided. {validation_error}"
+
+        operation_error = session_manager.record_operation(document_id)
+        if operation_error:
+            return "", operation_error
         
         file_path = session_manager.get_document_path(document_id)
         return file_path, ""
@@ -53,6 +57,10 @@ def resolve_document_path(document_id: Optional[str] = None, filename: Optional[
         validation_error = session_manager.validate_document_id(document_id)
         if validation_error:
             return "", validation_error
+
+        operation_error = session_manager.record_operation(document_id)
+        if operation_error:
+            return "", operation_error
         
         file_path = session_manager.get_document_path(document_id)
         if not file_path:

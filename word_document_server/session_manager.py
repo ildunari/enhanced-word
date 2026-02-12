@@ -9,6 +9,10 @@ from typing import Dict, Optional, List, Any
 from dataclasses import dataclass
 from docx import Document
 from word_document_server.utils.file_utils import ensure_docx_extension
+from word_document_server.utils.limits import (
+    SESSION_CONSISTENCY_WARNING,
+    get_long_session_op_limit,
+)
 
 
 @dataclass
@@ -78,7 +82,8 @@ class DocumentSessionManager:
                 "opened_at": str(os.path.getmtime(file_path)),
                 "paragraph_count": len(doc.paragraphs),
                 "section_count": len(doc.sections),
-                "file_size": os.path.getsize(file_path)
+                "file_size": os.path.getsize(file_path),
+                "operation_count": 0,
             }
             
             handle = DocumentHandle(
@@ -231,6 +236,32 @@ class DocumentSessionManager:
                 return f"Error: Document ID '{document_id}' not found. No documents are currently open. Use open_document() first."
         
         return ""  # Valid
+
+    def record_operation(self, document_id: str) -> str:
+        """
+        Track operations routed through a session document_id.
+
+        Returns:
+            Empty string if under limit, warning/error message when limit is exceeded.
+        """
+        validation_error = self.validate_document_id(document_id)
+        if validation_error:
+            return validation_error
+
+        handle = self._documents[document_id]
+        operation_count = int(handle.metadata.get("operation_count", 0)) + 1
+        handle.metadata["operation_count"] = operation_count
+
+        limit = get_long_session_op_limit()
+        if operation_count > limit:
+            return (
+                f"[{SESSION_CONSISTENCY_WARNING}] Operation limit exceeded for document_id "
+                f"'{document_id}': operation_count={operation_count} exceeds "
+                f"EW_LONG_SESSION_OP_LIMIT={limit}. Close/reopen the session document "
+                "or increase the configured limit."
+            )
+
+        return ""
     
     def close_all_documents(self) -> str:
         """

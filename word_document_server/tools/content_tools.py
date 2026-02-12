@@ -16,17 +16,18 @@ from word_document_server.utils.session_utils import resolve_document_path
 from word_document_server.core.styles import ensure_heading_style, ensure_table_style
 from word_document_server.utils.equation_utils import latex_to_omml
 from word_document_server.utils.citation_utils import extract_fields_from_run, format_run_with_citation_awareness
+from word_document_server.utils.limits import (
+    LIMIT_EXCEEDED,
+    REGEX_COMPLEXITY_BLOCKED,
+    check_doc_size_for_operation,
+    get_max_matches_per_call,
+    get_max_regex_pattern_chars,
+    get_max_regex_scan_chars,
+    get_max_search_output_chars,
+    get_regex_timeout_ms,
+    is_regex_timeout_supported,
+)
 from docx.oxml import parse_xml
-
-
-def _env_int(name: str, default: int, minimum: int = 1) -> int:
-    """Read an integer from environment with a safe fallback."""
-    raw = os.getenv(name, str(default))
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value >= minimum else minimum
 
 
 def _truncate_message(message: str, max_chars: int) -> str:
@@ -38,6 +39,26 @@ def _truncate_message(message: str, max_chars: int) -> str:
     if keep <= 0:
         return suffix[-max_chars:]
     return message[:keep] + suffix
+
+
+def _regex_complexity_reason(pattern: str) -> Optional[str]:
+    """Return a reason string when a pattern looks pathologically expensive."""
+    nested_quantifier = re.search(
+        r"\((?:[^()\\]|\\.)*(?:\*|\+|\{\d+,?\d*\})(?:[^()\\]|\\.)*\)\s*(?:\*|\+|\{\d+,?\d*\})",
+        pattern,
+    )
+    if nested_quantifier:
+        return "nested quantifiers in grouped expression"
+
+    wildcard_repetition = re.search(r"\((?:\.\*|\.\+|\\w\+|\\s\+)\)\+", pattern)
+    if wildcard_repetition:
+        return "repeated wildcard-like capture group"
+
+    alternations = pattern.count("|")
+    if alternations > 256:
+        return f"alternation count {alternations} exceeds safety threshold 256"
+
+    return None
 
 
 async def add_text_content(
@@ -260,6 +281,14 @@ async def add_text_content(
     
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
+
+    size_ok, size_error = check_doc_size_for_operation(filename, "enhanced_search_and_replace")
+    if not size_ok:
+        return size_error
+
+    size_ok, size_error = check_doc_size_for_operation(filename, "add_text_content")
+    if not size_ok:
+        return size_error
     
     # Check if file is writeable
     is_writeable, error_message = check_file_writeable(filename)
@@ -387,6 +416,10 @@ async def add_table(document_id: str = None, filename: str = None, rows: int = N
 
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
+
+    size_ok, size_error = check_doc_size_for_operation(filename, "add_table")
+    if not size_ok:
+        return size_error
 
     # Validate rows and cols parameters before proceeding
     if rows is None or cols is None:
@@ -624,6 +657,10 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
+
+    size_ok, size_error = check_doc_size_for_operation(filename, "enhanced_search_and_replace")
+    if not size_ok:
+        return size_error
     
     # Check if file is writeable
     is_writeable, error_message = check_file_writeable(filename)
@@ -643,8 +680,35 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     if char_start is not None and char_end is not None and char_end < char_start:
         return "Error: char_end cannot be less than char_start"
 
+    # Guardrails
+    max_matches_per_call = get_max_matches_per_call()
+    max_output_chars = get_max_search_output_chars()
+    max_regex_pattern_chars = get_max_regex_pattern_chars()
+    max_regex_scan_chars = get_max_regex_scan_chars()
+    regex_timeout_ms = get_regex_timeout_ms()
+
     # Validate regex pattern if using regex
     if use_regex:
+        if len(find_text) > max_regex_pattern_chars:
+            return (
+                f"[{LIMIT_EXCEEDED}] Regex pattern too long. "
+                f"len(find_text)={len(find_text)} exceeds EW_MAX_REGEX_PATTERN_CHARS={max_regex_pattern_chars}."
+            )
+
+        complexity_reason = _regex_complexity_reason(find_text)
+        if complexity_reason:
+            return (
+                f"[{REGEX_COMPLEXITY_BLOCKED}] Regex pattern refused by preflight: "
+                f"{complexity_reason}. Refine the expression."
+            )
+
+        if regex_timeout_ms > 0 and not is_regex_timeout_supported():
+            return (
+                f"[{REGEX_COMPLEXITY_BLOCKED}] EW_REGEX_TIMEOUT_MS={regex_timeout_ms} is configured, "
+                "but timeout-capable regex runtime is unavailable. Set EW_REGEX_TIMEOUT_MS=0 "
+                "or add runtime support for regex timeouts."
+            )
+
         try:
             import re
             # Validate with the same flags used at runtime
@@ -652,18 +716,6 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
             re.compile(find_text, flags)
         except re.error as e:
             return f"Invalid regex pattern '{find_text}': {str(e)}"
-
-    # Guardrails
-    max_matches_per_call = _env_int("EW_MAX_MATCHES_PER_CALL", 1000)
-    max_output_chars = _env_int("EW_MAX_SEARCH_OUTPUT_CHARS", 200_000)
-    max_regex_pattern_chars = _env_int("EW_MAX_REGEX_PATTERN_CHARS", 5_000)
-    max_regex_scan_chars = _env_int("EW_MAX_REGEX_SCAN_CHARS", 2_000_000)
-
-    if use_regex and len(find_text) > max_regex_pattern_chars:
-        return (
-            "Regex pattern too long. "
-            f"len(find_text)={len(find_text)} exceeds EW_MAX_REGEX_PATTERN_CHARS={max_regex_pattern_chars}."
-        )
 
     # Pre-validate LaTeX conversion once to avoid partial/slow failures during replacement.
     # If conversion fails, we bail out before mutating any document content.
@@ -685,7 +737,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                         regex_scan_chars += sum(len(p.text) for p in cell.paragraphs)
             if regex_scan_chars > max_regex_scan_chars:
                 return (
-                    "Regex search refused due to scan-size guardrail. "
+                    f"[{LIMIT_EXCEEDED}] Regex search refused due to scan-size guardrail. "
                     f"document_chars={regex_scan_chars} exceeds EW_MAX_REGEX_SCAN_CHARS={max_regex_scan_chars}. "
                     "Refine the query or raise the limit."
                 )
@@ -829,7 +881,7 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                 )
             if replacement_limit_hit:
                 response += (
-                    f" Replacement limit reached: EW_MAX_MATCHES_PER_CALL={max_matches_per_call}. "
+                    f" [{LIMIT_EXCEEDED}] Replacement limit reached: EW_MAX_MATCHES_PER_CALL={max_matches_per_call}. "
                     "Additional matches were not modified."
                 )
             return _truncate_message(response, max_output_chars)
