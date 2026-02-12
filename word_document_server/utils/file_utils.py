@@ -230,13 +230,21 @@ def validate_docx_path(filepath: str) -> Tuple[bool, str, str]:
     Returns:
         Tuple of (is_valid, sanitized_path, error_message)
     """
-    # First sanitize the general path
-    is_valid, sanitized_path, error = sanitize_file_path(filepath, ['.docx', '.doc'])
-    
+    # Sanitize without enforcing an extension first (we may need to add .docx).
+    is_valid, sanitized_path, error = sanitize_file_path(filepath, allowed_extensions=None)
     if not is_valid:
         return False, "", error
-    
-    # Ensure .docx extension
-    sanitized_path = ensure_docx_extension(sanitized_path)
-    
+
+    base, ext = os.path.splitext(sanitized_path)
+    if ext.lower() == ".doc":
+        return False, "", "Error: .doc files are not supported. Please provide a .docx file."
+
+    # Add .docx if user provided no extension.
+    if ext == "":
+        sanitized_path = ensure_docx_extension(sanitized_path)
+        return True, sanitized_path, ""
+
+    if ext.lower() != ".docx":
+        return False, "", "Error: Invalid file extension. Only .docx is supported."
+
     return True, sanitized_path, ""
