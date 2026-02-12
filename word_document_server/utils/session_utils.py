@@ -4,6 +4,7 @@ Session utility functions for backward compatibility and document access.
 Provides helper functions to support both document_id and filename parameters
 in tools, allowing for gradual migration to session-based document management.
 """
+import os
 from typing import Optional, Tuple
 from word_document_server.session_manager import get_session_manager
 from word_document_server.utils.file_utils import ensure_docx_extension
@@ -61,7 +62,14 @@ def resolve_document_path(document_id: Optional[str] = None, filename: Optional[
     
     # Handle filename approach (legacy)
     if filename:
-        file_path = ensure_docx_extension(filename.strip())
+        file_path = filename.strip()
+        _, ext = os.path.splitext(file_path)
+        if ext and ext.lower() == ".doc":
+            return "", "Error: .doc files are not supported. Please provide a .docx file."
+        if not ext:
+            file_path = ensure_docx_extension(file_path)
+        elif ext.lower() != ".docx":
+            return "", "Error: Invalid file extension. Only .docx is supported."
         return file_path, ""
     
     # Should never reach here

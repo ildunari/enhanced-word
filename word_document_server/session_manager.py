@@ -49,9 +49,15 @@ class DocumentSessionManager:
                 
             if not file_path or not file_path.strip():
                 return "Error: file_path cannot be empty"
-            
-            # Ensure .docx extension
-            file_path = ensure_docx_extension(file_path)
+
+            # Ensure/validate .docx extension. Reject .doc explicitly.
+            base, ext = os.path.splitext(file_path)
+            if ext and ext.lower() == ".doc":
+                return "Error: .doc files are not supported. Please provide a .docx file."
+            if not ext:
+                file_path = ensure_docx_extension(file_path)
+            elif ext.lower() != ".docx":
+                return "Error: Invalid file extension. Only .docx is supported."
             
             # Check if file exists
             if not os.path.exists(file_path):
