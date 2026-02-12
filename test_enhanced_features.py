@@ -42,7 +42,8 @@ def main() -> int:
     if install.returncode != 0:
         return install.returncode
 
-    result = subprocess.run([str(venv_python), "-m", "pytest", "-q"])
+    # Keep npm/local default test run fast; stress suites run in dedicated jobs.
+    result = subprocess.run([str(venv_python), "-m", "pytest", "-q", "-m", "not stress"])
     return result.returncode
 
 

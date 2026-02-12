@@ -260,14 +260,32 @@ Document protection management:
 
 ## Safety Guardrails
 
-`enhanced_search_and_replace` and `get_text(scope="search")` apply configurable limits to avoid runaway searches and oversized responses:
+`enhanced_search_and_replace` and `get_text(scope="search")` apply configurable limits to avoid runaway searches, oversized responses, and memory pressure:
 
 - `EW_MAX_MATCHES_PER_CALL` (default `1000`)
 - `EW_MAX_SEARCH_OUTPUT_CHARS` (default `200000`)
 - `EW_MAX_REGEX_PATTERN_CHARS` (default `5000`)
 - `EW_MAX_REGEX_SCAN_CHARS` (default `2000000`)
+- `EW_MAX_DOC_BYTES_PER_OPERATION` (default `50000000`)
+- `EW_MAX_UNDO_BYTES_TOTAL` (default `200000000`)
+- `EW_LONG_SESSION_OP_LIMIT` (default `2000`)
+- `EW_REGEX_TIMEOUT_MS` (default `0`; if set and timeout runtime is unavailable, operation is refused explicitly)
 
-When limits are hit, tools return explicit truncation/guardrail messages.
+When limits are hit, tools return explicit guardrail codes/messages, including:
+
+- `LIMIT_EXCEEDED`
+- `REGEX_COMPLEXITY_BLOCKED`
+- `DOC_TOO_LARGE`
+- `UNDO_BUDGET_EXCEEDED`
+- `SESSION_CONSISTENCY_WARNING`
+
+Mutation-heavy operations use fail-before-mutate semantics for preflight guardrail failures.
+
+## Session Consistency Contract
+
+- Disk path is authoritative for document state.
+- `document_id` is a routing alias to file paths.
+- In-memory session metadata is advisory and may lag; tools read from file paths each call.
 
 ## Error Handling
 
@@ -317,10 +335,13 @@ enhanced-word-mcp-server/
 ```bash
 # Run test suite
 python test_enhanced_features.py
-pytest -q
+pytest -q -m "not stress"
 
 # Run only end-to-end MCP stdio tests
 pytest -q -m e2e
+
+# Run stress/performance/soak tier (nightly/manual)
+pytest -q -m stress --durations=30
 
 # Test specific functionality
 python -c "from word_document_server.tools.content_tools import enhanced_search_and_replace; print(enhanced_search_and_replace('test.docx', 'old', 'new'))"
