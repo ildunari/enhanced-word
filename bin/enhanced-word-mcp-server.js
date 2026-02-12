@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
-const fs = require('fs');
 
 // Get the directory where this package is installed
 const packageDir = path.dirname(__dirname);
@@ -21,18 +20,22 @@ function findPythonWithMCP() {
   
   for (const pythonPath of pythonPaths) {
     try {
-      // Check if this Python has the mcp module
-      execSync(`${pythonPath} -c "import mcp; print('MCP found')"`, { 
-        stdio: 'pipe', 
-        timeout: 5000 
-      });
+      // Verify required runtime modules (FastMCP + python-docx).
+      execFileSync(
+        pythonPath,
+        ['-c', "from mcp.server.fastmcp import FastMCP; import docx; print('OK')"],
+        { stdio: 'pipe', timeout: 5000 }
+      );
       return pythonPath;
     } catch (err) {
       continue;
     }
   }
   
-  throw new Error('No Python installation found with MCP module. Please install: pip install mcp');
+  throw new Error(
+    "No compatible Python found. Need Python 3.10+ with required deps. " +
+    "Install with: pip install -r requirements.txt"
+  );
 }
 
 try {
@@ -51,13 +54,13 @@ try {
 
   python.on('error', (err) => {
     console.error('Failed to start Enhanced Word MCP Server:', err.message);
-    console.error('Make sure Python 3.11+ is installed with MCP module.');
+    console.error('Make sure Python 3.10+ is installed and requirements are met.');
     process.exit(1);
   });
 
 } catch (err) {
   console.error('Setup Error:', err.message);
-  console.error('Please install the MCP module: pip install mcp');
-  console.error('Or ensure Python 3.11+ is in your PATH.');
+  console.error('Ensure Python 3.10+ is in your PATH and dependencies are installed.');
+  console.error('Install with: pip install -r requirements.txt');
   process.exit(1);
 }
