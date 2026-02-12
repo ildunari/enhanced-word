@@ -123,9 +123,21 @@ async def convert_to_pdf(document_id: str = None, filename: str = None, output_f
                             pdf_base_name = os.path.splitext(base_name)[0] + ".pdf"
                             created_pdf = os.path.join(os.path.dirname(output_filename) or '.', pdf_base_name)
                             
+                            if not os.path.exists(created_pdf):
+                                errors.append(
+                                    f"{cmd_name} reported success but output PDF not found: {created_pdf}"
+                                )
+                                continue
+
                             # If the created PDF is not at the desired location, move it
-                            if created_pdf != output_filename and os.path.exists(created_pdf):
+                            if created_pdf != output_filename:
                                 shutil.move(created_pdf, output_filename)
+
+                            if not os.path.exists(output_filename):
+                                errors.append(
+                                    f"{cmd_name} reported success but output PDF not found: {output_filename}"
+                                )
+                                continue
                             
                             conversion_successful = True
                             break  # Exit the loop if successful
