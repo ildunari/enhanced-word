@@ -6,7 +6,12 @@ import json
 from typing import Dict, List, Optional, Any
 from docx import Document
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, create_document_copy
+from word_document_server.utils.file_utils import (
+    check_file_writeable,
+    ensure_docx_extension,
+    create_document_copy,
+    validate_docx_path,
+)
 from word_document_server.utils.document_utils import get_document_properties, extract_document_text, get_document_structure
 from word_document_server.utils.extended_document_utils import get_paragraph_text, find_text
 from word_document_server.utils.citation_utils import format_run_with_citation_awareness
@@ -21,7 +26,9 @@ async def create_document(filename: str, title: Optional[str] = None, author: Op
         title: Optional title for the document metadata
         author: Optional author for the document metadata
     """
-    filename = ensure_docx_extension(filename)
+    valid, filename, err = validate_docx_path(filename)
+    if not valid:
+        return f"Cannot create document: {err}"
     
     # Check if file is writeable
     is_writeable, error_message = check_file_writeable(filename)
