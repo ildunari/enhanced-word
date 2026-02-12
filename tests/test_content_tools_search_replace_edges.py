@@ -117,3 +117,22 @@ def test_replace_with_equation_invalid_latex_returns_error_and_no_mutation(tmp_p
 
     doc = Document(str(p))
     assert doc.paragraphs[0].text.strip() == "EQ"
+
+
+def test_enhanced_search_and_replace_requires_both_char_bounds(tmp_path: Path):
+    p = tmp_path / "char-range.docx"
+    asyncio.run(create_document(filename=str(p)))
+    asyncio.run(add_text_content(filename=str(p), text="foo bar foo"))
+
+    res = enhanced_search_and_replace(
+        filename=str(p),
+        find_text="foo",
+        replace_text="X",
+        start_paragraph=0,
+        end_paragraph=0,
+        char_start=4,
+    )
+    assert "char_start and char_end must both be provided together" in res
+
+    doc = Document(str(p))
+    assert doc.paragraphs[0].text == "foo bar foo"

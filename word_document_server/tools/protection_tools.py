@@ -6,13 +6,10 @@ password protection, restricted editing, and digital signatures.
 """
 import os
 import json
-import shutil
 import hashlib
 import datetime
-import io 
 from typing import List, Optional, Dict, Any
 from docx import Document
-import msoffcrypto 
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.utils.session_utils import resolve_document_path
@@ -22,8 +19,16 @@ from word_document_server.utils.session_utils import resolve_document_path
 from word_document_server.core.protection import (
     add_protection_info,
     verify_document_protection,
-    create_signature_info
+    create_signature_info,
+    verify_signature,
 )
+from word_document_server.core.unprotect import remove_protection_info
+
+
+def _get_metadata_path(doc_path: str) -> str:
+    """Return the canonical sidecar metadata path for a document."""
+    base_path, _ = os.path.splitext(doc_path)
+    return f"{base_path}.protection"
 
 
 async def add_digital_signature(document_id: str = None, filename: str = None, signer_name: str = None, reason: Optional[str] = None) -> str:
@@ -372,11 +377,13 @@ async def manage_protection(
                     return f"Document {filename} appears to be password protected or corrupted"
             
             elif protection_type == "restricted":
-                protection_file = filename + ".protection"
+                protection_file = _get_metadata_path(filename)
                 if os.path.exists(protection_file):
                     try:
                         with open(protection_file, 'r') as f:
                             protection_data = json.load(f)
+                        if protection_data.get("type") != "restricted":
+                            return f"Document {filename} has no restricted editing protection"
                         return f"Document {filename} has restricted editing protection. Editable sections: {protection_data.get('editable_sections', [])}"
                     except Exception:
                         return f"Document {filename} has protection metadata but it's corrupted"
@@ -384,12 +391,19 @@ async def manage_protection(
                     return f"Document {filename} has no restricted editing protection"
             
             elif protection_type == "signature":
-                signature_file = filename + ".signature"
-                if os.path.exists(signature_file):
+                metadata_file = _get_metadata_path(filename)
+                if os.path.exists(metadata_file):
                     try:
-                        with open(signature_file, 'r') as f:
+                        with open(metadata_file, 'r') as f:
                             signature_data = json.load(f)
-                        return f"Document {filename} is digitally signed by {signature_data.get('signer_name', 'Unknown')} on {signature_data.get('timestamp', 'Unknown date')}"
+                        if signature_data.get("type") != "signature":
+                            return f"Document {filename} has no digital signature"
+                        signature_info = signature_data.get("signature", {})
+                        return (
+                            f"Document {filename} is digitally signed by "
+                            f"{signature_info.get('signer', 'Unknown')} on "
+                            f"{signature_info.get('timestamp', 'Unknown date')}"
+                        )
                     except Exception:
                         return f"Document {filename} has signature metadata but it's corrupted"
                 else:
@@ -402,155 +416,82 @@ async def manage_protection(
                 return f"Cannot modify document: {error_message}. Consider creating a copy first."
             
             if protection_type == "password":
-                # Password protection using msoffcrypto
-                try:
-                    import msoffcrypto
-                    
-                    # Create backup
-                    backup_filename = filename + ".backup"
-                    shutil.copy2(filename, backup_filename)
-                    
-                    try:
-                        # Read file and encrypt it
-                        with open(filename, "rb") as f:
-                            file = msoffcrypto.OfficeFile(f)
-                            file.load_key(password=password)
-                        
-                        # This is a simplified approach - in practice you'd need to
-                        # use a different library or approach for encryption
-                        return f"Password protection added to {filename}"
-                    
-                    except Exception as e:
-                        # Restore backup on failure
-                        shutil.move(backup_filename, filename)
-                        return f"Failed to add password protection: {str(e)}"
-                    finally:
-                        # Clean up backup if successful
-                        if os.path.exists(backup_filename):
-                            os.remove(backup_filename)
-                
-                except ImportError:
-                    return "Password protection requires msoffcrypto library. Please install it with: pip install msoffcrypto-tool"
+                success = add_protection_info(
+                    filename,
+                    protection_type="password",
+                    password_hash=hashlib.sha256(password.encode()).hexdigest(),
+                    raw_password=password,
+                )
+                if not success:
+                    return f"Failed to add password protection to {filename}"
+                return f"Password protection added to {filename}"
             
             elif protection_type == "restricted":
-                # Restricted editing protection using metadata
-                protection_data = {
-                    "type": "restricted_editing",
-                    "password_hash": hashlib.sha256(password.encode()).hexdigest(),
-                    "editable_sections": editable_sections,
-                    "created": datetime.now().isoformat()
-                }
-                
-                protection_file = filename + ".protection"
-                with open(protection_file, 'w') as f:
-                    json.dump(protection_data, f, indent=2)
-                
+                success = add_protection_info(
+                    filename,
+                    protection_type="restricted",
+                    password_hash=hashlib.sha256(password.encode()).hexdigest(),
+                    sections=editable_sections,
+                )
+                if not success:
+                    return f"Failed to add restricted editing protection to {filename}"
                 return f"Restricted editing protection added to {filename}. Editable sections: {', '.join(editable_sections)}"
             
             elif protection_type == "signature":
-                # Digital signature protection
-                doc = Document(filename)
-                
-                # Calculate content hash for integrity
-                content = "\\n".join([p.text for p in doc.paragraphs])
-                content_hash = hashlib.sha256(content.encode()).hexdigest()
-                
-                # Create signature data
-                signature_data = {
-                    "signer_name": signer_name,
-                    "reason": signature_reason or "Document approval",
-                    "timestamp": datetime.now().isoformat(),
-                    "content_hash": content_hash
-                }
-                
-                # Save signature metadata
-                signature_file = filename + ".signature"
-                with open(signature_file, 'w') as f:
-                    json.dump(signature_data, f, indent=2)
-                
-                # Add visible signature to document
-                signature_text = f"\\n\\n--- DIGITAL SIGNATURE ---\\nSigned by: {signer_name}\\nReason: {signature_data['reason']}\\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\\n--- END SIGNATURE ---"
-                doc.add_paragraph(signature_text)
-                doc.save(filename)
-                
-                return f"Digital signature added to {filename} by {signer_name}"
+                return await add_digital_signature(
+                    filename=filename,
+                    signer_name=signer_name,
+                    reason=signature_reason,
+                )
         
         elif action == "unprotect":
             if protection_type == "password":
-                # Password unprotection using msoffcrypto
-                try:
-                    import msoffcrypto
-                    
-                    # Create backup
-                    backup_filename = filename + ".backup"
-                    shutil.copy2(filename, backup_filename)
-                    
-                    try:
-                        with open(filename, "rb") as f:
-                            file = msoffcrypto.OfficeFile(f)
-                            file.load_key(password=password)
-                            
-                            # Decrypt and save
-                            with open(filename + ".temp", "wb") as output:
-                                file.decrypt(output)
-                        
-                        # Replace original with decrypted version
-                        shutil.move(filename + ".temp", filename)
-                        os.remove(backup_filename)
-                        
-                        return f"Password protection removed from {filename}"
-                    
-                    except Exception as e:
-                        # Restore backup on failure
-                        shutil.move(backup_filename, filename)
-                        if os.path.exists(filename + ".temp"):
-                            os.remove(filename + ".temp")
-                        return f"Failed to remove password protection: {str(e)}. Check password is correct."
-                
-                except ImportError:
-                    return "Password unprotection requires msoffcrypto library. Please install it with: pip install msoffcrypto-tool"
+                success, message = remove_protection_info(filename, password=password)
+                if not success:
+                    return f"Failed to remove password protection: {message}"
+                return f"Password protection removed from {filename}"
             
             elif protection_type == "restricted":
-                # Remove restricted editing protection
-                protection_file = filename + ".protection"
-                if os.path.exists(protection_file):
-                    os.remove(protection_file)
-                    return f"Restricted editing protection removed from {filename}"
-                else:
+                metadata_file = _get_metadata_path(filename)
+                if not os.path.exists(metadata_file):
                     return f"No restricted editing protection found on {filename}"
+                try:
+                    with open(metadata_file, "r") as f:
+                        metadata = json.load(f)
+                    if metadata.get("type") != "restricted":
+                        return f"No restricted editing protection found on {filename}"
+                except Exception:
+                    return f"Failed to remove restricted editing protection: metadata is corrupted"
+                success, message = remove_protection_info(filename, password=password)
+                if not success:
+                    return f"Failed to remove restricted editing protection: {message}"
+                return f"Restricted editing protection removed from {filename}"
             
             elif protection_type == "signature":
-                # Remove digital signature
-                signature_file = filename + ".signature"
-                if os.path.exists(signature_file):
-                    os.remove(signature_file)
-                    return f"Digital signature removed from {filename}"
-                else:
+                metadata_file = _get_metadata_path(filename)
+                if not os.path.exists(metadata_file):
                     return f"No digital signature found on {filename}"
+                try:
+                    with open(metadata_file, "r") as f:
+                        metadata = json.load(f)
+                    if metadata.get("type") != "signature":
+                        return f"No digital signature found on {filename}"
+                except Exception:
+                    return f"Failed to remove digital signature: metadata is corrupted"
+                success, message = remove_protection_info(filename)
+                if not success:
+                    return f"Failed to remove digital signature: {message}"
+                return f"Digital signature removed from {filename}"
         
         elif action == "verify":
             if protection_type == "signature":
-                # Verify digital signature
-                signature_file = filename + ".signature"
-                if not os.path.exists(signature_file):
+                metadata_file = _get_metadata_path(filename)
+                if not os.path.exists(metadata_file):
                     return f"No digital signature found on {filename}"
-                
-                try:
-                    with open(signature_file, 'r') as f:
-                        signature_data = json.load(f)
-                    
-                    # Verify content hash
-                    doc = Document(filename)
-                    current_content = "\\n".join([p.text for p in doc.paragraphs])
-                    current_hash = hashlib.sha256(current_content.encode()).hexdigest()
-                    
-                    if current_hash == signature_data.get("content_hash"):
-                        return f"Digital signature verified. Document has not been modified since signing by {signature_data.get('signer_name', 'Unknown')}"
-                    else:
-                        return f"Digital signature verification FAILED. Document has been modified since signing."
-                
-                except Exception as e:
-                    return f"Failed to verify signature: {str(e)}"
+                is_valid, message = verify_signature(filename)
+                if is_valid:
+                    return f"Digital signature verified. {message}"
+                return f"Digital signature verification FAILED. {message}"
             else:
                 return f"Verification not supported for {protection_type} protection"
     

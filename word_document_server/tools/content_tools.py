@@ -677,6 +677,9 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     if (char_start is not None or char_end is not None) and paragraph_indices is None and start_paragraph is None and end_paragraph is None:
         return "Error: char_start/char_end require a paragraph range to be specified"
 
+    if (char_start is None) != (char_end is None):
+        return "Error: char_start and char_end must both be provided together"
+
     if char_start is not None and char_end is not None and char_end < char_start:
         return "Error: char_end cannot be less than char_start"
 
