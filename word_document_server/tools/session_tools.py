@@ -317,4 +317,4 @@ CONSOLIDATED_TOOLS = [
     'open_document', 'close_document', 'list_open_documents', 'set_active_document', 'close_all_documents'  # Original tools (for backward compatibility)
 ]
 
-__all__ = CONSOLIDATED_TOOLS + ['DocumentSessionManager', 'get_session_manager']
+__all__ = CONSOLIDATED_TOOLS
