@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kosta-enhanced-word-mcp-server"
-version = "2.0.0"
+version = "2.7.13"
 description = "Enhanced Word MCP server for academic research collaboration with advanced search/replace, review tools, and section management"
 readme = "README.md"
 # Keep license metadata without requiring a file in the repo
@@ -27,8 +27,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/kosta/kosta-enhanced-word-mcp-server"
-"Bug Tracker" = "https://github.com/kosta/kosta-enhanced-word-mcp-server/issues"
+"Homepage" = "https://github.com/ildunari/enhanced-word"
+"Bug Tracker" = "https://github.com/ildunari/enhanced-word/issues"
 
 [tool.hatch.build.targets.wheel]
 only-include = [
