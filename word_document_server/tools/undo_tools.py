@@ -14,6 +14,7 @@ Keeping everything behind a single entry point helps us stay below the global
 from typing import Optional
 
 from word_document_server.utils.session_utils import resolve_document_path
+from word_document_server.session_manager import get_session_manager
 from word_document_server.undo_manager import get_undo_manager
 
 
@@ -53,6 +54,14 @@ def session_undo(
 
     # For undo/redo we require a concrete target path
     if action in {"undo", "redo"}:
+        # If no target provided, fall back to active document in session (if any).
+        if not document_id and not filename:
+            mgr = get_session_manager()
+            active_id = getattr(mgr, "_active_document_id", None)
+            if not active_id:
+                return "Error: Either 'document_id' or 'filename' parameter is required"
+            document_id = active_id
+
         # Need a concrete target path
         file_path, err = resolve_document_path(document_id, filename)
         if err:
