@@ -10,13 +10,16 @@ wheels/
 .venv
 .DS_Store
 
-# Test files
-test_*.py
-test_*.docx
-*_test.py
-*_test.docx
-verify_*.py
+# Tests: keep repository tests tracked; ignore only generated artifacts/caches.
+*.docx
 test_artifacts/
+.pytest_cache/
+
+!tests/
+!tests/**
+!tests/fixtures/
+!tests/fixtures/**
+!test_enhanced_features.py
 
 # Temporary Word documents
 ~$*.docx
