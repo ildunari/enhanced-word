@@ -53,7 +53,7 @@ Core document management functionality:
 - **Content Operations**: `enhanced_search_and_replace`, `add_table`, `add_picture`
 - **Export**: `convert_to_pdf`
 
-### 🔧 Advanced Features (5 Tools)
+### 🔧 Advanced Features (6 Tools)
 Specialized functionality for professional workflows:
 
 - **Collaboration**: `manage_comments`, `extract_track_changes`, `generate_review_summary`
@@ -88,7 +88,7 @@ enhanced_search_and_replace("doc.docx",
 ### 📝 Unified Text Extraction
 ```python
 # Extract full document with formatting
-get_text("doc.docx", scope="document", include_formatting=True)
+get_text("doc.docx", scope="all", include_formatting=True)
 
 # Search within document
 get_text("doc.docx", scope="search", search_term="methodology", match_case=False)
@@ -222,7 +222,7 @@ verification = verify_document("contract.docx")
 
 #### `get_text(filename, scope, **options)`
 Unified text extraction with multiple modes:
-- `scope`: "document" | "paragraph" | "search" | "range"
+- `scope`: "all" | "paragraph" | "search" | "range"
 - `include_formatting`: Extract formatting information
 - `search_term`: Text to search for (when scope="search")
 - `paragraph_index`: Specific paragraph (when scope="paragraph")
@@ -242,7 +242,7 @@ Unified content creation:
 - `content_type`: "paragraph" | "heading"
 - `level`: Heading level (1-6)
 - `style`: Apply document style
-- `position`: "start" | "end" | specific index
+- `position`: "beginning" | "end" | "before" | "after"
 
 #### `get_sections(filename, mode, **options)`
 Advanced section extraction:
@@ -256,7 +256,18 @@ Document protection management:
 - `action`: "protect" | "unprotect" | "verify" | "status"
 - `protection_type`: "password" | "restricted" | "signature"
 - `password`: Protection password
-- `allowed_editing`: Editing permissions
+- `editable_sections`: Section names editable under restricted mode
+
+## Safety Guardrails
+
+`enhanced_search_and_replace` and `get_text(scope="search")` apply configurable limits to avoid runaway searches and oversized responses:
+
+- `EW_MAX_MATCHES_PER_CALL` (default `1000`)
+- `EW_MAX_SEARCH_OUTPUT_CHARS` (default `200000`)
+- `EW_MAX_REGEX_PATTERN_CHARS` (default `5000`)
+- `EW_MAX_REGEX_SCAN_CHARS` (default `2000000`)
+
+When limits are hit, tools return explicit truncation/guardrail messages.
 
 ## Error Handling
 
@@ -306,6 +317,10 @@ enhanced-word-mcp-server/
 ```bash
 # Run test suite
 python test_enhanced_features.py
+pytest -q
+
+# Run only end-to-end MCP stdio tests
+pytest -q -m e2e
 
 # Test specific functionality
 python -c "from word_document_server.tools.content_tools import enhanced_search_and_replace; print(enhanced_search_and_replace('test.docx', 'old', 'new'))"

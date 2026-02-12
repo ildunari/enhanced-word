@@ -6,7 +6,7 @@ registered by `word_document_server/main.py`.
 """
 
 # ========== CONSOLIDATED TOOLS ==========
-# These are the unified tools that replace numerous legacy functions; total registered tools = 24.
+# These unified tools replace numerous legacy functions; total registered tools = 25.
 
 # Document tools - consolidated
 from word_document_server.tools.document_tools import (
@@ -34,7 +34,7 @@ from word_document_server.tools.content_tools import (
 # Review tools - consolidated
 from word_document_server.tools.review_tools import (
     manage_track_changes,  # Replaces: accept_all_changes, reject_all_changes  
-    manage_comments,  # Enhanced: Complete comment lifecycle management (replaces extract_comments)
+    manage_comments,  # list-only marker scanning (replaces extract_comments)
     extract_track_changes,
     generate_review_summary
 )
@@ -54,7 +54,7 @@ from word_document_server.tools.protection_tools import (
 
 # Footnote tools - consolidated
 from word_document_server.tools.footnote_tools import (
-    add_note  # Replaces: add_footnote_to_document, add_endnote_to_document
+    add_note  # Disabled (python-docx footnote/endnote limitation)
 )
 
 # Extended document tools
@@ -110,7 +110,7 @@ REGISTERED_TOOL_NAMES = [
     "insert_equation",
 ]
 
-# Export consolidated tool list for reference
+# Exported symbols for compatibility (includes legacy names not registered by main.py).
 CONSOLIDATED_TOOLS = [
     # 3 Consolidated Wrapper Tools (replaces 10 original tools)
     'session_manager',  # Replaces 5 session tools
@@ -139,7 +139,7 @@ CONSOLIDATED_TOOLS = [
     'insert_equation'
 ]
 
-# Total tools registered by main.py (should match `REGISTERED_TOOL_NAMES`).
+# Total tools registered by main.py (must match `REGISTERED_TOOL_NAMES`).
 REGISTERED_TOOL_COUNT = len(REGISTERED_TOOL_NAMES)
 TOTAL_TOOL_COUNT = REGISTERED_TOOL_COUNT
 
