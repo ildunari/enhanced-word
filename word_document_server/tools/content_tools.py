@@ -19,6 +19,27 @@ from word_document_server.utils.citation_utils import extract_fields_from_run, f
 from docx.oxml import parse_xml
 
 
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    """Read an integer from environment with a safe fallback."""
+    raw = os.getenv(name, str(default))
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value >= minimum else minimum
+
+
+def _truncate_message(message: str, max_chars: int) -> str:
+    """Prevent oversized textual tool responses."""
+    if len(message) <= max_chars:
+        return message
+    suffix = f"... [truncated to {max_chars} chars]"
+    keep = max_chars - len(suffix)
+    if keep <= 0:
+        return suffix[-max_chars:]
+    return message[:keep] + suffix
+
+
 async def add_text_content(
     document_id: str = None,
     filename: str = None,
@@ -632,6 +653,18 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         except re.error as e:
             return f"Invalid regex pattern '{find_text}': {str(e)}"
 
+    # Guardrails
+    max_matches_per_call = _env_int("EW_MAX_MATCHES_PER_CALL", 1000)
+    max_output_chars = _env_int("EW_MAX_SEARCH_OUTPUT_CHARS", 200_000)
+    max_regex_pattern_chars = _env_int("EW_MAX_REGEX_PATTERN_CHARS", 5_000)
+    max_regex_scan_chars = _env_int("EW_MAX_REGEX_SCAN_CHARS", 2_000_000)
+
+    if use_regex and len(find_text) > max_regex_pattern_chars:
+        return (
+            "Regex pattern too long. "
+            f"len(find_text)={len(find_text)} exceeds EW_MAX_REGEX_PATTERN_CHARS={max_regex_pattern_chars}."
+        )
+
     # Pre-validate LaTeX conversion once to avoid partial/slow failures during replacement.
     # If conversion fails, we bail out before mutating any document content.
     precomputed_equation_omml_xml = None
@@ -643,6 +676,19 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     
     try:
         doc = Document(filename)
+
+        if use_regex:
+            regex_scan_chars = sum(len(p.text) for p in doc.paragraphs)
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        regex_scan_chars += sum(len(p.text) for p in cell.paragraphs)
+            if regex_scan_chars > max_regex_scan_chars:
+                return (
+                    "Regex search refused due to scan-size guardrail. "
+                    f"document_chars={regex_scan_chars} exceeds EW_MAX_REGEX_SCAN_CHARS={max_regex_scan_chars}. "
+                    "Refine the query or raise the limit."
+                )
         
         # Determine which paragraphs to process.
         #
@@ -667,11 +713,14 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
 
         # Global occurrence counter
         current_occurrence = 0
+        replacement_limit_hit = False
 
         def process_para(p_idx, paragraph_list):
-            nonlocal current_occurrence, count, equations_inserted
+            nonlocal current_occurrence, count, equations_inserted, replacement_limit_hit
             # If p_idx is provided, honor paragraph-range gating; for table
             # paragraphs (p_idx is None), process unconditionally.
+            if replacement_limit_hit:
+                return
             if p_idx is not None and p_idx not in target_paragraphs:
                 return
             import re
@@ -721,11 +770,14 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
                 latex_equation=latex_equation,
                 preserve_fields=preserve_fields,
                 equation_omml_xml=precomputed_equation_omml_xml,
+                max_replacements=max_matches_per_call - count,
             )
             if had_equations:
                 equations_inserted = True
             current_occurrence += match_count
             count += replace_count
+            if count >= max_matches_per_call:
+                replacement_limit_hit = True
     
         count = 0
         equations_inserted = False
@@ -735,12 +787,21 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
         # Process body paragraphs
         for idx, para in enumerate(doc.paragraphs):
             process_para(idx, [para])
+            if replacement_limit_hit:
+                break
 
         # Search in tables (treat cell paragraphs independently of doc paragraph indices)
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    process_para(None, cell.paragraphs)
+        if not replacement_limit_hit:
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        process_para(None, cell.paragraphs)
+                        if replacement_limit_hit:
+                            break
+                    if replacement_limit_hit:
+                        break
+                if replacement_limit_hit:
+                    break
         
         if count > 0:
             # If equations were inserted, ensure math namespace is present
@@ -757,12 +818,25 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
             formatting_applied = " with formatting" if apply_formatting else ""
             
             if replace_with_equation:
-                return f"Replaced {count} occurrence(s) of {search_type} '{find_text}'{case_info}{word_info} with equation{formatting_applied}."
+                response = (
+                    f"Replaced {count} occurrence(s) of {search_type} '{find_text}'"
+                    f"{case_info}{word_info} with equation{formatting_applied}."
+                )
             else:
-                return f"Replaced {count} occurrence(s) of {search_type} '{find_text}'{case_info}{word_info} with '{replace_text}'{formatting_applied}."
+                response = (
+                    f"Replaced {count} occurrence(s) of {search_type} '{find_text}'"
+                    f"{case_info}{word_info} with '{replace_text}'{formatting_applied}."
+                )
+            if replacement_limit_hit:
+                response += (
+                    f" Replacement limit reached: EW_MAX_MATCHES_PER_CALL={max_matches_per_call}. "
+                    "Additional matches were not modified."
+                )
+            return _truncate_message(response, max_output_chars)
         else:
             search_type = "regex pattern" if use_regex else "text"
-            return f"No occurrences of {search_type} '{find_text}' found."
+            response = f"No occurrences of {search_type} '{find_text}' found."
+            return _truncate_message(response, max_output_chars)
             
     except FileNotFoundError:
         return f"Document {filename} not found"
@@ -779,7 +853,8 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                                    char_start=None, char_end=None,
                                    replace_with_equation=False, latex_equation=None,
                                    preserve_fields=True,
-                                   equation_omml_xml=None):
+                                   equation_omml_xml=None,
+                                   max_replacements=None):
     """Helper function to replace text in paragraphs with optional formatting and regex support.
     
     This implementation fixes the positioning bugs by properly inserting runs at their
@@ -846,6 +921,13 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
 
         if not matches_to_apply:
             continue
+
+        if max_replacements is not None:
+            remaining = max_replacements - count
+            if remaining <= 0:
+                break
+            if len(matches_to_apply) > remaining:
+                matches_to_apply = matches_to_apply[:remaining]
 
         count += len(matches_to_apply)
         
@@ -1079,7 +1161,6 @@ def _enhanced_replace_in_paragraphs(paragraphs, find_text, replace_text, apply_f
                     _apply_run_formatting(new_run, segment['formatting'])
     
     return count, match_total_overall, equations_inserted
-    return count, match_total_overall
 
 
 def _extract_run_formatting(run):

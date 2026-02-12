@@ -18,6 +18,50 @@ from word_document_server.utils.citation_utils import format_run_with_citation_a
 from word_document_server.core.styles import ensure_heading_style, ensure_table_style
 
 
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value >= minimum else minimum
+
+
+def _json_dumps_with_char_limit(payload: Dict[str, Any], max_chars: int) -> str:
+    text = json.dumps(payload, indent=2)
+    if len(text) <= max_chars:
+        return text
+
+    reduced = dict(payload)
+    reduced["truncated"] = True
+    reduced["output_truncated"] = True
+    reduced["output_char_limit"] = max_chars
+
+    occurrences = reduced.get("occurrences")
+    if isinstance(occurrences, list):
+        total_found = reduced.get("total_count", len(occurrences))
+        items = list(occurrences)
+        while items:
+            reduced["occurrences"] = items
+            candidate = json.dumps(reduced, indent=2)
+            if len(candidate) <= max_chars:
+                reduced["returned_count"] = len(items)
+                reduced["total_count"] = total_found
+                return candidate
+            items.pop()
+
+        reduced["occurrences"] = []
+        reduced["returned_count"] = 0
+        reduced["total_count"] = total_found
+        return json.dumps(reduced, indent=2)
+
+    # Last resort for non-occurrence payloads.
+    text = json.dumps(reduced, indent=2)
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 24] + "... [output truncated]"
+
+
 async def create_document(filename: str, title: Optional[str] = None, author: Optional[str] = None) -> str:
     """Create a new Word document with optional metadata.
     
@@ -253,6 +297,8 @@ async def get_text(
     
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
+
+    max_output_chars = _env_int("EW_MAX_SEARCH_OUTPUT_CHARS", 200_000, minimum=256)
     
     def extract_run_formatting(run, detail_level="basic"):
         """Extract formatting information from a run."""
@@ -412,13 +458,16 @@ async def get_text(
                 result = find_text(filename, search_term, match_case, whole_word)
                 # Limit results if max_results is specified
                 if "occurrences" in result and len(result["occurrences"]) > max_results:
+                    original_total = len(result["occurrences"])
                     result["occurrences"] = result["occurrences"][:max_results]
-                    result["total_count"] = len(result["occurrences"])
+                    result["total_count"] = original_total
+                    result["returned_count"] = len(result["occurrences"])
                     result["truncated"] = True
-                return json.dumps(result, indent=2)
+                return _json_dumps_with_char_limit(result, max_output_chars)
             else:
                 doc = Document(filename)
                 occurrences = []
+                hit_result_limit = False
                 
                 search_lower = search_term.lower() if not match_case else search_term
                 
@@ -474,11 +523,13 @@ async def get_text(
                         occurrences.append(occurrence)
                         
                         if len(occurrences) >= max_results:
+                            hit_result_limit = True
                             break
                         
                         start = end_pos
                     
                     if len(occurrences) >= max_results:
+                        hit_result_limit = True
                         break
                 
                 result = {
@@ -487,11 +538,12 @@ async def get_text(
                     "whole_word": whole_word,
                     "formatting_detail": formatting_detail,
                     "total_count": len(occurrences),
-                    "truncated": len(occurrences) >= max_results,
+                    "returned_count": len(occurrences),
+                    "truncated": hit_result_limit,
                     "occurrences": occurrences
                 }
                 
-                return json.dumps(result, indent=2)
+                return _json_dumps_with_char_limit(result, max_output_chars)
         
         elif scope == "range":
             # New functionality: extract paragraph range with optional formatting
