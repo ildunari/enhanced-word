@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+.venv-test/
 .DS_Store
 
 # Tests: keep repository tests tracked; ignore only generated artifacts/caches.
