@@ -2,7 +2,7 @@
 
 [![smithery badge](https://smithery.ai/badge/@GongRzhe/Office-Word-MCP-Server)](https://smithery.ai/server/@GongRzhe/Office-Word-MCP-Server)
 
-A powerful, consolidated Model Context Protocol (MCP) server for creating, reading, and manipulating Microsoft Word documents. This enhanced version provides 38 optimized tools for comprehensive Word document operations through a standardized interface.
+A powerful, consolidated Model Context Protocol (MCP) server for creating, reading, and manipulating Microsoft Word documents (.docx). This enhanced version registers 25 tools for comprehensive Word document operations through a standardized interface.
 
 <a href="https://glama.ai/mcp/servers/@GongRzhe/Office-Word-MCP-Server">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@GongRzhe/Office-Word-MCP-Server/badge" alt="Office Word Server MCP server" />
@@ -12,7 +12,7 @@ A powerful, consolidated Model Context Protocol (MCP) server for creating, readi
 
 ## Overview
 
-Enhanced-Word-MCP-Server implements the [Model Context Protocol](https://modelcontextprotocol.io/) with a focus on comprehensive document operations. It provides 38 powerful tools, including:
+Enhanced-Word-MCP-Server implements the [Model Context Protocol](https://modelcontextprotocol.io/) with a focus on comprehensive document operations. It registers 25 tools, including:
 
 - **Session management** for multi-document workflows
 - **Consolidated operations** for better usability  
@@ -31,8 +31,7 @@ create_document("thesis.docx", title="AI in Healthcare", author="John Doe")
 add_text_content("thesis.docx", "Introduction", content_type="heading", level=1)
 add_text_content("thesis.docx", "This paper explores...", content_type="paragraph")
 
-# Add references and notes
-add_note("thesis.docx", paragraph_index=0, note_text="See methodology section", note_type="footnote")
+# Footnotes/endnotes are not supported by python-docx and are disabled in this server.
 ```
 
 ## Features Overview
@@ -42,7 +41,7 @@ Unified operations that replace multiple individual functions:
 
 - **`get_text`** - Unified text extraction (replaces 3 tools)
 - **`manage_track_changes`** - Track changes management (replaces 2 tools)  
-- **`add_note`** - Footnote/endnote creation (replaces 2 tools)
+- **`add_note`** - Footnote/endnote tool (currently disabled; python-docx limitation)
 - **`add_text_content`** - Paragraph/heading creation (replaces 2 tools)
 - **`get_sections`** - Section extraction (replaces 2 tools)
 - **`manage_protection`** - Document protection (replaces 2 tools)
@@ -101,10 +100,10 @@ get_text("doc.docx", scope="paragraph", paragraph_index=5)
 ### 📑 Flexible Section Management
 ```python
 # Extract all sections with formatting
-get_sections("doc.docx", extraction_type="all", include_formatting=True)
+get_sections("doc.docx", mode="overview", include_formatting=True)
 
 # Get specific section content
-get_sections("doc.docx", extraction_type="specific", section_title="Results")
+get_sections("doc.docx", mode="content", section_title="Results")
 ```
 
 ### 🔒 Advanced Protection Management
@@ -112,9 +111,9 @@ get_sections("doc.docx", extraction_type="specific", section_title="Results")
 # Password protection
 manage_protection("doc.docx", action="protect", protection_type="password", password="secure123")
 
-# Read-only protection with exceptions
-manage_protection("doc.docx", action="protect", protection_type="editing", 
-                 allowed_editing="comments", password="review123")
+# Restricted editing with editable sections (metadata + optional encryption depending on environment)
+manage_protection("doc.docx", action="protect", protection_type="restricted",
+                 password="review123", editable_sections=["Introduction", "Conclusion"])
 ```
 
 ## Installation
@@ -180,22 +179,19 @@ add_text_content("research_paper.docx", "Abstract", content_type="heading", leve
 add_text_content("research_paper.docx", "This study examines...", content_type="paragraph", 
                 style="Normal", position="end")
 
-# Add citations and notes
-add_note("research_paper.docx", paragraph_index=1, 
-         note_text="See Smith et al. (2023) for detailed methodology", 
-         note_type="footnote")
+# Footnotes/endnotes are disabled (python-docx limitation). Insert notes manually in Word if needed.
 
 # Format academic terms
 format_research_paper_terms("research_paper.docx")
 
-# Extract sections for review
-sections = get_sections("research_paper.docx", extraction_type="all", max_level=2)
+# Extract structure for review
+sections = get_sections("research_paper.docx", mode="overview", max_level=2)
 ```
 
 ### Document Review Workflow
 ```python
-# Extract all review elements
-comments = extract_comments("draft.docx")
+# Extract review elements
+comments = manage_comments("draft.docx", action="list")  # list-only (legacy in-text markers)
 changes = extract_track_changes("draft.docx")
 
 # Generate comprehensive review summary
@@ -238,11 +234,8 @@ Comprehensive track changes management:
 - `author`: Filter by specific author
 - `date_range`: Filter by date range
 
-#### `add_note(filename, paragraph_index, note_text, note_type, **options)`
-Unified footnote/endnote creation:
-- `note_type`: "footnote" | "endnote"
-- `custom_symbol`: Use custom reference symbol
-- `position`: Note positioning options
+#### `add_note(...)`
+Footnotes/endnotes are **disabled** in this server (python-docx limitation). Insert notes manually in Word.
 
 #### `add_text_content(filename, text, content_type, **options)`
 Unified content creation:
@@ -251,17 +244,17 @@ Unified content creation:
 - `style`: Apply document style
 - `position`: "start" | "end" | specific index
 
-#### `get_sections(filename, extraction_type, **options)`
+#### `get_sections(filename, mode, **options)`
 Advanced section extraction:
-- `extraction_type`: "all" | "specific" | "by_level"
-- `section_title`: Specific section to extract
+- `mode`: "overview" | "content"
+- `section_title`: Optional section to target
 - `max_level`: Maximum heading level
-- `include_formatting`: Preserve formatting
+- `output_format`: "text" | "json"
 
-#### `manage_protection(filename, action, **options)`
+#### `manage_protection(filename, action, protection_type, **options)`
 Document protection management:
-- `action`: "protect" | "unprotect" | "check"
-- `protection_type`: "password" | "editing" | "readonly"
+- `action`: "protect" | "unprotect" | "verify" | "status"
+- `protection_type`: "password" | "restricted" | "signature"
 - `password`: Protection password
 - `allowed_editing`: Editing permissions
 
@@ -325,7 +318,7 @@ MIT License - see LICENSE file for details.
 ## Version History
 
 ### v2.0.0 (Enhanced)
-- 🎯 **38 powerful tools** for comprehensive document operations
+- 🎯 **25 registered tools** for comprehensive document operations
 - 🚀 **Enhanced search & replace** with regex support
 - 📝 **Consolidated operations** for better usability
 - 🔧 **Improved error handling** and validation
