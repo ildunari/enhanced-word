@@ -42,4 +42,5 @@ word_mcp_server = "word_document_server.main:run_server"
 [tool.pytest.ini_options]
 markers = [
     "e2e: end-to-end MCP stdio integration tests",
+    "stress: heavy stress/performance/soak tests (nightly/manual CI)",
 ]

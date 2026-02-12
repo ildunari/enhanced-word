@@ -38,6 +38,7 @@ def test_guardrail_regex_pattern_length(tmp_path: Path, monkeypatch):
     p = tmp_path / "guard-pattern.docx"
     asyncio.run(create_document(filename=str(p)))
     asyncio.run(add_text_content(filename=str(p), text="hello world"))
+    before = p.read_bytes()
 
     result = enhanced_search_and_replace(
         filename=str(p),
@@ -46,6 +47,7 @@ def test_guardrail_regex_pattern_length(tmp_path: Path, monkeypatch):
         use_regex=True,
     )
     assert "Regex pattern too long" in result
+    assert p.read_bytes() == before
 
 
 def test_guardrail_regex_scan_size(tmp_path: Path, monkeypatch):
@@ -54,6 +56,7 @@ def test_guardrail_regex_scan_size(tmp_path: Path, monkeypatch):
     p = tmp_path / "guard-scan.docx"
     asyncio.run(create_document(filename=str(p)))
     asyncio.run(add_text_content(filename=str(p), text="a" * 200))
+    before = p.read_bytes()
 
     result = enhanced_search_and_replace(
         filename=str(p),
@@ -62,6 +65,27 @@ def test_guardrail_regex_scan_size(tmp_path: Path, monkeypatch):
         use_regex=True,
     )
     assert "Regex search refused due to scan-size guardrail" in result
+    assert p.read_bytes() == before
+
+
+def test_guardrail_regex_scan_size_table_content_is_atomic(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("EW_MAX_REGEX_SCAN_CHARS", "30")
+
+    p = tmp_path / "guard-table-scan.docx"
+    doc = Document()
+    table = doc.add_table(rows=1, cols=1)
+    table.cell(0, 0).text = "b" * 200
+    doc.save(str(p))
+    before = p.read_bytes()
+
+    result = enhanced_search_and_replace(
+        filename=str(p),
+        find_text=r"b+",
+        replace_text="z",
+        use_regex=True,
+    )
+    assert "Regex search refused due to scan-size guardrail" in result
+    assert p.read_bytes() == before
 
 
 def test_get_text_search_output_is_char_capped(tmp_path: Path, monkeypatch):
@@ -89,4 +113,3 @@ def test_get_text_search_output_is_char_capped(tmp_path: Path, monkeypatch):
     assert payload.get("truncated") is True
     assert payload.get("output_truncated") is True
     assert payload.get("returned_count", 0) <= payload.get("total_count", 0)
-
