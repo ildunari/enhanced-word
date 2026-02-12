@@ -43,155 +43,77 @@ def manage_comments(
     author: str = None,
     comment_id: str = None
 ) -> str:
-    """Enhanced comment management with extraction, creation, and resolution capabilities.
-    
-    This enhanced function now provides complete comment lifecycle management including extraction,
-    creation, resolution, and deletion while maintaining backward compatibility for listing comments.
+    """List comments using legacy in-text markers.
+
+    python-docx cannot reliably create/resolve/delete native Word comments, so this tool only
+    supports listing comments by scanning for legacy markers embedded in text, e.g.:
+      [COMMENT-deadbeef by Alice: check this]
+      [RESOLVED-deadbeef by Alice: check this]
     
     Args:
         document_id: Session document ID (preferred)
         filename: Path to the Word document (legacy, for backward compatibility)
-        action: Operation to perform:
-            - "list" (default): Extract all comments with metadata
-            - "add": Create new comment on specified paragraph  
-            - "resolve": Mark comment as resolved
-            - "delete": Remove comment completely
-        paragraph_index: Zero-based paragraph index for new comments (required for "add")
-        comment_text: Comment content text (required for "add")
-        author: Comment author name (optional, defaults to "User")
-        comment_id: Identifier for existing comment operations (required for "resolve"/"delete")
+        action: Only "list" is supported.
     
     Returns:
         Formatted string with comment information or operation status
     """
     from word_document_server.utils.session_utils import resolve_document_path
-    
+
     # Resolve document path from document_id or filename
     filename, error_msg = resolve_document_path(document_id, filename)
     if error_msg:
         return error_msg
     
     # Validate action parameter
-    valid_actions = ["list", "add", "resolve", "delete"]
+    valid_actions = ["list"]
     if action not in valid_actions:
-        return f"Invalid action: {action}. Must be one of: {', '.join(valid_actions)}"
-    
-    # Validate required parameters for each action
-    if action == "add":
-        if paragraph_index is None:
-            return "Parameter 'paragraph_index' is required for action 'add'"
-        if not comment_text:
-            return "Parameter 'comment_text' is required for action 'add'"
-    
-    if action in ["resolve", "delete"]:
-        if not comment_id:
-            return f"Parameter 'comment_id' is required for action '{action}'"
+        return (
+            "Comments are not supported by python-docx. "
+            "Only 'list' is available, and it scans for legacy in-text markers."
+        )
     
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
     
-    # Handle comment management actions
-    if action in ["add", "resolve", "delete"]:
-        # Check if file is writeable for modification actions
-        is_writeable, error_message = check_file_writeable(filename)
-        if not is_writeable:
-            return f"Cannot modify document: {error_message}"
-    
     try:
         doc = Document(filename)
-        
-        # Handle comment management actions
-        if action == "add":
-            # Add new comment to specified paragraph
-            if paragraph_index >= len(doc.paragraphs):
-                return f"Paragraph index {paragraph_index} is out of range (document has {len(doc.paragraphs)} paragraphs)"
-            
-            paragraph = doc.paragraphs[paragraph_index]
-            author_name = author or "User"
-            
-            # Add comment as a text annotation (simplified implementation)
-            import uuid
-            comment_uuid = str(uuid.uuid4())[:8]
-            comment_marker = f" [COMMENT-{comment_uuid} by {author_name}: {comment_text}]"
-            
-            # Add the comment text to the end of the paragraph
-            if paragraph.text:
-                paragraph.text += comment_marker
-            else:
-                paragraph.text = comment_marker
-            
-            doc.save(filename)
-            return f"Successfully added comment {comment_uuid} to paragraph {paragraph_index}"
-        
-        elif action in ["resolve", "delete"]:
-            # Search through document for comment markers
-            comment_found = False
-            
-            for para_idx, paragraph in enumerate(doc.paragraphs):
-                if f"[COMMENT-{comment_id}" in paragraph.text or f"[RESOLVED-{comment_id}" in paragraph.text:
-                    comment_found = True
-                    
-                    if action == "resolve":
-                        # Mark as resolved
-                        paragraph.text = paragraph.text.replace(f"[COMMENT-{comment_id}", f"[RESOLVED-{comment_id}")
-                        doc.save(filename)
-                        return f"Successfully resolved comment {comment_id}"
-                    
-                    elif action == "delete":
-                        # Remove comment completely
-                        start_markers = [f"[COMMENT-{comment_id}", f"[RESOLVED-{comment_id}"]
-                        for start_marker in start_markers:
-                            if start_marker in paragraph.text:
-                                start_pos = paragraph.text.find(start_marker)
-                                if start_pos != -1:
-                                    end_pos = paragraph.text.find("]", start_pos)
-                                    if end_pos != -1:
-                                        comment_part = paragraph.text[start_pos:end_pos+1]
-                                        paragraph.text = paragraph.text.replace(comment_part, "")
-                                        doc.save(filename)
-                                        return f"Successfully deleted comment {comment_id}"
-                    break
-            
-            if not comment_found:
-                return f"Comment {comment_id} not found in document"
-        
+
         # Handle list action - search for text-based comment markers
-        elif action == "list":
-            comments_info = []
+        comments_info = []
             
-            # Search through all paragraphs for comment markers
-            for para_idx, paragraph in enumerate(doc.paragraphs):
-                text = paragraph.text
-                
-                # Find all comment markers in this paragraph
-                import re
-                # Pattern matches: [COMMENT-12345678 by Author: comment text] or [RESOLVED-12345678 by Author: comment text]
-                pattern = r'\[(COMMENT|RESOLVED)-([A-Fa-f0-9]{8}) by ([^:]+): ([^\]]+)\]'
-                matches = re.findall(pattern, text, flags=re.IGNORECASE)
-                
-                for match in matches:
-                    status, comment_id, author_name, comment_content = match
-                    comments_info.append({
-                        'id': comment_id,
-                        'author': author_name,
-                        'status': status.lower(),  # 'comment' or 'resolved'
-                        'text': comment_content,
-                        'paragraph_index': para_idx
-                    })
+        # Search through all paragraphs for comment markers
+        for para_idx, paragraph in enumerate(doc.paragraphs):
+            text = paragraph.text
+
+            # Pattern matches: [COMMENT-12345678 by Author: comment text] or [RESOLVED-12345678 by Author: comment text]
+            import re
+            pattern = r'\[(COMMENT|RESOLVED)-([A-Fa-f0-9]{8}) by ([^:]+): ([^\]]+)\]'
+            matches = re.findall(pattern, text, flags=re.IGNORECASE)
+
+            for match in matches:
+                status, comment_id, author_name, comment_content = match
+                comments_info.append({
+                    'id': comment_id,
+                    'author': author_name,
+                    'status': status.lower(),  # 'comment' or 'resolved'
+                    'text': comment_content,
+                    'paragraph_index': para_idx
+                })
             
-            if not comments_info:
-                return "No comments found in the document."
+        if not comments_info:
+            return "No comments found in the document."
             
-            # Format output
-            result = f"Found {len(comments_info)} comments:\n\n"
-            for i, comment in enumerate(comments_info, 1):
-                status_indicator = " (RESOLVED)" if comment['status'] == 'resolved' else ""
-                result += f"Comment {i} (ID: {comment['id']}){status_indicator}:\n"
-                result += f"  Author: {comment['author']}\n"
-                result += f"  Paragraph: {comment['paragraph_index']}\n"
-                result += f"  Text: {comment['text']}\n\n"
-            
-            return result
+        # Format output
+        result = f"Found {len(comments_info)} comments:\n\n"
+        for i, comment in enumerate(comments_info, 1):
+            status_indicator = " (RESOLVED)" if comment['status'] == 'resolved' else ""
+            result += f"Comment {i} (ID: {comment['id']}){status_indicator}:\n"
+            result += f"  Author: {comment['author']}\n"
+            result += f"  Paragraph: {comment['paragraph_index']}\n"
+            result += f"  Text: {comment['text']}\n\n"
+
+        return result
     
     except Exception as e:
         return f"Failed to manage comments: {str(e)}"
