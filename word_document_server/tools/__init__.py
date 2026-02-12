@@ -1,10 +1,8 @@
 """
 MCP tool implementations for the Enhanced Word Document Server.
 
-This package contains the consolidated MCP tool implementations that expose 
-24 optimized tools (reduced from 47) through the Model Context Protocol.
-
-Version 2.2.0 - Consolidated & Enhanced
+This package exports tool callables and provides a stable list of the tool names
+registered by `word_document_server/main.py`.
 """
 
 # ========== CONSOLIDATED TOOLS ==========
@@ -80,6 +78,38 @@ from word_document_server.tools.undo_tools import session_undo  # noqa: F401
 # Equation tool
 from word_document_server.tools.equation_tools import insert_equation  # noqa: F401
 
+# Citation tool (consolidated entry point)
+from word_document_server.tools.citation_tools import citations  # noqa: F401
+
+# Tools registered by `word_document_server/main.py` (source of truth for tool count).
+REGISTERED_TOOL_NAMES = [
+    "session_manager",
+    "get_text",
+    "manage_track_changes",
+    "add_note",
+    "add_text_content",
+    "get_sections",
+    "manage_protection",
+    "manage_comments",
+    "document_utility",
+    "create_document",
+    "copy_document",
+    "merge_documents",
+    "enhanced_search_and_replace",
+    "add_table",
+    "add_picture",
+    "convert_to_pdf",
+    "format_document",
+    "extract_track_changes",
+    "generate_review_summary",
+    "generate_table_of_contents",
+    "add_digital_signature",
+    "verify_document",
+    "citations",
+    "session_undo",
+    "insert_equation",
+]
+
 # Export consolidated tool list for reference
 CONSOLIDATED_TOOLS = [
     # 3 Consolidated Wrapper Tools (replaces 10 original tools)
@@ -109,8 +139,13 @@ CONSOLIDATED_TOOLS = [
     'insert_equation'
 ]
 
-# Total: 23 tools registered after adding undo/redo (still under 25)
-REGISTERED_TOOL_COUNT = len(CONSOLIDATED_TOOLS)
+# Total tools registered by main.py (should match `REGISTERED_TOOL_NAMES`).
+REGISTERED_TOOL_COUNT = len(REGISTERED_TOOL_NAMES)
 TOTAL_TOOL_COUNT = REGISTERED_TOOL_COUNT
 
-__all__ = CONSOLIDATED_TOOLS + ['CONSOLIDATED_TOOLS', 'TOTAL_TOOL_COUNT']
+__all__ = CONSOLIDATED_TOOLS + [
+    "CONSOLIDATED_TOOLS",
+    "REGISTERED_TOOL_NAMES",
+    "REGISTERED_TOOL_COUNT",
+    "TOTAL_TOOL_COUNT",
+]
