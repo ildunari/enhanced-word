@@ -644,10 +644,20 @@ def enhanced_search_and_replace(document_id: str = None, filename: str = None,
     try:
         doc = Document(filename)
         
-        # Determine which paragraphs to process
+        # Determine which paragraphs to process.
+        #
+        # Note: A valid .docx can contain tables but zero "body paragraphs" as
+        # exposed by python-docx. In that case, we still want to process table
+        # cell paragraphs when the caller did not specify a paragraph range.
         total_paragraphs = len(doc.paragraphs)
-        if paragraph_indices is not None:
+        if total_paragraphs == 0:
+            if paragraph_indices is not None or start_paragraph is not None or end_paragraph is not None:
+                return "Invalid paragraph range. Document has 0 paragraphs."
+            target_paragraphs = []
+        elif paragraph_indices is not None:
             target_paragraphs = sorted(set(paragraph_indices))
+            if any(idx < 0 or idx >= total_paragraphs for idx in target_paragraphs):
+                return f"Invalid paragraph range. Document has {total_paragraphs} paragraphs (0-{total_paragraphs-1})"
         else:
             start_idx = start_paragraph if start_paragraph is not None else 0
             end_idx = end_paragraph if end_paragraph is not None else total_paragraphs - 1
