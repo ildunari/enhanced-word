@@ -53,33 +53,33 @@ async def add_digital_signature(document_id: str = None, filename: str = None, s
     try:
         doc = Document(filename)
 
-        # Create signature info
-        signature_info = create_signature_info(doc, signer_name, reason)
+        # Add a visible signature block to the document.
+        #
+        # Important: do NOT include a derived signature/hash value inside the document text,
+        # otherwise verification based on the document text can never match.
+        doc.add_paragraph("").add_run()  # spacing
+        signature_para = doc.add_paragraph()
+        signature_para.add_run(f"Digitally signed by: {signer_name}").bold = True
+        if reason:
+            signature_para.add_run(f"\nReason: {reason}")
+        signature_para.add_run(f"\nDate: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # Add protection info to metadata
+        # Save first, then compute the signature hash on the final signed content.
+        doc.save(filename)
+
+        signed_doc = Document(filename)
+        signature_info = create_signature_info(signed_doc, signer_name, reason)
+
         success = add_protection_info(
             filename,
             protection_type="signature",
             password_hash="",  # No password for signature-only
-            signature_info=signature_info
+            signature_info=signature_info,
         )
-
-        if success:
-            # Add a visible signature block to the document
-            doc.add_paragraph("").add_run()  # Add empty paragraph for spacing
-            signature_para = doc.add_paragraph()
-            signature_para.add_run(f"Digitally signed by: {signer_name}").bold = True
-            if reason:
-                signature_para.add_run(f"\nReason: {reason}")
-            signature_para.add_run(f"\nDate: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            signature_para.add_run(f"\nSignature ID: {signature_info['content_hash'][:8]}")
-
-            # Save the document with the visible signature
-            doc.save(filename)
-
-            return f"Digital signature added to document {filename}"
-        else:
+        if not success:
             return f"Failed to add digital signature to document {filename}"
+
+        return f"Digital signature added to document {filename}"
     except Exception as e:
         return f"Failed to add digital signature: {str(e)}"
 
